@@ -45,19 +45,24 @@
     </section>
 
     <!-- ================= 1. SNIPER ================= -->
-    <section class="page" data-page="sniper" hidden>
-      <article class="card" data-bot="sniper">
-        <header class="card-head">
-          <span class="num">1</span>
-          <div class="title"><h2>Sniper bot</h2><p>Scant DexScreener (nieuwe profielen, boosts) en GeckoTerminal (nieuwe pools) en scoort elke Solana coin op liquiditeit, volume, koopdruk, momentum, leeftijd en socials.</p></div>
+    <section class="page" data-page="sniper" data-bot="sniper" hidden>
+      <header class="hero">
+        <div class="hero-top">
+          <span class="hero-icon">🎯</span>
+          <div class="hero-txt"><div class="hero-kicker">Bot 1</div><h2>Sniper</h2><p>Live Pump.fun launches en migraties via PumpPortal, plus DexScreener en GeckoTerminal. Elke coin krijgt een score op liquiditeit, volume, koopdruk, momentum, leeftijd en socials.</p></div>
           <span class="status" data-status></span>
-        </header>
+        </div>
         <div class="controls">
           <button class="btn primary" data-toggle>Start</button>
-          <button class="btn" data-once>Nu scannen</button>
+          <button class="btn" data-once>⟳ Nu scannen</button>
           <button class="btn ghost" data-settings>⚙ Instellingen</button>
         </div>
         <form class="settings" data-form hidden></form>
+        <div class="kpis" data-kpis></div>
+      </header>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Gescande coins</h2><p>Laatste 20 minuten, hoogste score eerst</p></div></header>
+        <div class="filters" data-filters="sniper"></div>
         <div class="body" data-body></div>
       </article>
       <article class="card">
@@ -67,19 +72,23 @@
     </section>
 
     <!-- ================= 2. SECURITY ================= -->
-    <section class="page" data-page="security" hidden>
-      <form class="manual"><input name="mint" placeholder="Plak een token adres (mint) om direct te checken…" autocomplete="off" spellcheck="false"><button class="btn">Check token</button></form>
-      <article class="card" data-bot="security">
-        <header class="card-head">
-          <span class="num">2</span>
-          <div class="title"><h2>Security check</h2><p>Mint &amp; freeze authority, rugged, Token-2022 extensies, transfer tax, LP locked/burned, top holders, insider netwerk, RugCheck risico's en een honeypot test (koop + verkoop simulatie via Jupiter).</p></div>
+    <section class="page" data-page="security" data-bot="security" hidden>
+      <header class="hero">
+        <div class="hero-top">
+          <span class="hero-icon">🛡️</span>
+          <div class="hero-txt"><div class="hero-kicker">Bot 2</div><h2>Security check</h2><p>Mint &amp; freeze authority, rugged, Token-2022 extensies, transfer tax, LP locked/burned, top holders, insiders, RugCheck risico&#39;s, Jupiter organic score en een honeypot test (koop + verkoop simulatie).</p></div>
           <span class="status" data-status></span>
-        </header>
+        </div>
         <div class="controls">
           <button class="btn primary" data-toggle>Start</button>
           <button class="btn ghost" data-settings>⚙ Instellingen</button>
         </div>
         <form class="settings" data-form hidden></form>
+        <div class="kpis" data-kpis></div>
+      </header>
+      <form class="manual"><input name="mint" placeholder="Plak een token adres (mint) om direct te checken…" autocomplete="off" spellcheck="false"><button class="btn primary">Check token</button></form>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Gecontroleerde coins</h2><p>Klik op een kaart voor alle checks</p></div></header>
         <div class="body" data-body></div>
       </article>
       <article class="card">
@@ -89,18 +98,22 @@
     </section>
 
     <!-- ================= 3. REAL CHECK ================= -->
-    <section class="page" data-page="real" hidden>
-      <article class="card" data-bot="real">
-        <header class="card-head">
-          <span class="num">3</span>
-          <div class="title"><h2>Real check</h2><p>Observeert veilige coins meerdere rondes: blijft de liquiditeit, houdt de prijs stand, blijven kopers komen, klopt DexScreener met Jupiter en is de coin nog verkoopbaar?</p></div>
+    <section class="page" data-page="real" data-bot="real" hidden>
+      <header class="hero">
+        <div class="hero-top">
+          <span class="hero-icon">👀</span>
+          <div class="hero-txt"><div class="hero-kicker">Bot 3</div><h2>Real check</h2><p>Volgt veilige coins meerdere rondes: blijft de liquiditeit, houdt de prijs stand, blijven kopers komen, klopt DexScreener met Jupiter en is de coin nog verkoopbaar?</p></div>
           <span class="status" data-status></span>
-        </header>
+        </div>
         <div class="controls">
           <button class="btn primary" data-toggle>Start</button>
           <button class="btn ghost" data-settings>⚙ Instellingen</button>
         </div>
         <form class="settings" data-form hidden></form>
+        <div class="kpis" data-kpis></div>
+      </header>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Coins</h2><p>In observatie en resultaten</p></div></header>
         <div class="body" data-body></div>
       </article>
       <article class="card">
@@ -110,20 +123,23 @@
     </section>
 
     <!-- ================= 4. PAPER ================= -->
-    <section class="page" data-page="paper" hidden>
-      <div class="stats"></div>
-      <article class="card" data-bot="paper">
-        <header class="card-head">
-          <span class="num">4</span>
-          <div class="title"><h2>Paper trader</h2><p>Koopt bevestigde coins met nep-SOL op echte Jupiter quotes. Take profit, stop loss, trailing stop, max houdtijd en rug-alarm.</p></div>
+    <section class="page" data-page="paper" data-bot="paper" hidden>
+      <header class="hero">
+        <div class="hero-top">
+          <span class="hero-icon">📈</span>
+          <div class="hero-txt"><div class="hero-kicker">Bot 4</div><h2>Paper trader</h2><p>Koopt bevestigde coins met nep-SOL op echte Jupiter quotes. Exits elke paar seconden: take profit, stop loss, trailing stop, max houdtijd en rug-alarm.</p></div>
           <span class="status" data-status></span>
-        </header>
+        </div>
         <div class="controls">
           <button class="btn primary" data-toggle>Start</button>
-          <button class="btn ghost" data-settings>⚙ Instellingen</button>
           <button class="btn danger ghost" id="resetPaper">Reset account</button>
+          <button class="btn ghost" data-settings>⚙ Instellingen</button>
         </div>
         <form class="settings" data-form hidden></form>
+        <div class="kpis" data-kpis></div>
+      </header>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Posities</h2><p>De balk loopt van stop loss (links) naar take profit (rechts)</p></div></header>
         <div class="body" data-body></div>
       </article>
       <article class="card">
@@ -142,17 +158,19 @@
 
     <!-- ================= ANALYSE ================= -->
     <section class="page" data-page="analyse" hidden>
-      <article class="card">
-        <header class="card-head">
-          <div class="title"><h2>Analyse: werken de filters?</h2><p>Elke coin die de sniper ziet wordt gevolgd, ook de afgekeurde. Na 5m tot 6u wordt gemeten of het een winnaar of een rug werd.</p></div>
-        </header>
+      <header class="hero">
+        <div class="hero-top">
+          <span class="hero-icon">🔬</span>
+          <div class="hero-txt"><div class="hero-kicker">Analyse</div><h2>Werken de filters?</h2><p>Elke coin die de sniper ziet wordt gevolgd, ook de afgekeurde. Na 5m tot 6u wordt gemeten of het een winnaar of een rug werd.</p></div>
+        </div>
         <div class="controls">
           <button class="btn" id="exportTracker">⬇ Metingen (CSV)</button>
           <button class="btn" id="exportTrades">⬇ Trades (CSV)</button>
           <button class="btn danger ghost" id="resetTracker">Metingen wissen</button>
         </div>
-        <div class="body" id="analyse"></div>
-      </article>
+        <div class="kpis" data-kpis-analyse></div>
+      </header>
+      <div id="analyse"></div>
     </section>
 
     <p class="disclaimer">
@@ -162,7 +180,7 @@
     </p>
   </main>
 
-  <dialog id="detail"><div id="detailBody"></div><form method="dialog"><button class="btn">Sluiten</button></form></dialog>
+  <dialog id="detail"><form method="dialog" class="dlg-close"><button class="btn ghost small" aria-label="Sluiten">✕</button></form><div id="detailBody"></div></dialog>
 
   <script type="module" src="js/app.js"></script>
 </body>

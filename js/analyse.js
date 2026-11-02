@@ -10,7 +10,8 @@ const median = (a) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 const pctCell = (v, d = 0) => (v == null ? '<span class="mint">—</span>' : `<span class="${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : ''}${v.toFixed(d)}%</span>`);
-const rate = (v, cls) => (v == null ? '<span class="mint">—</span>' : `<span class="${cls}">${Math.round(v)}%</span>`);
+const rate = (v, cls) => (v == null ? '<span class="mint">—</span>'
+  : `<span class="rate ${cls}"><span class="rate-bar"><i style="width:${Math.max(2, Math.min(100, v))}%"></i></span><b>${Math.round(v)}%</b></span>`);
 const MIN_N = 8;
 
 /** Aggregates a group of records. Win/rug rates use coins measured for at least 15 min. */
@@ -37,12 +38,12 @@ function groupBy(recs, keyFn) {
   return m;
 }
 
-function table(title, rows, firstCol = 'Groep') {
+function table(title, rows, firstCol = 'Groep', sub = '') {
   if (!rows.length) return '';
-  return `<div class="sectionlbl">${title}</div>
-  <table><thead><tr><th>${firstCol}</th><th class="r">Coins</th><th class="r">Gemeten</th><th class="r">Mediaan 15m</th><th class="r">Mediaan 1u</th><th class="r">Winnaar</th><th class="r">Rug</th></tr></thead><tbody>
+  return `<article class="card"><header class="card-head"><div class="title"><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div></header><div class="body">
+  <table class="nice"><thead><tr><th>${firstCol}</th><th class="r">Coins</th><th class="r">Gemeten</th><th class="r">Mediaan 15m</th><th class="r">Mediaan 1u</th><th class="r">Winnaar</th><th class="r">Rug</th></tr></thead><tbody>
   ${rows.map(([label, a]) => `<tr><td>${label}</td><td class="r">${a.n}</td><td class="r">${a.m}</td><td class="r">${pctCell(a.med15, 1)}</td><td class="r">${pctCell(a.med60, 1)}</td><td class="r">${rate(a.win, 'pos')}</td><td class="r">${rate(a.rug, 'neg')}</td></tr>`).join('')}
-  </tbody></table>`;
+  </tbody></table></div></article>`;
 }
 
 export function insights(recs) {
@@ -106,23 +107,27 @@ export function renderAnalyse(el, tracker) {
   const ago = (ms) => (ms < 3.6e6 ? `${Math.round(ms / 60000)}m` : `${(ms / 3.6e6).toFixed(1)}u`);
 
   el.innerHTML = `
-    <div class="insights">${ins.map(([k, t]) => `<div class="insight ${k}">${k === 'ok' ? '✅' : k === 'warn' ? '⚠️' : '💡'} ${esc(t)}</div>`).join('')}</div>
-    <p class="mint">Winnaar = ooit ≥ +${WIN_PCT}% na eerste keer gezien · Rug = prijs ≤ ${RUG_PCT}% of liquiditeit −80% · metingen na ${CHECKPOINTS.map((c) => (c < 60 ? `${c}m` : `${c / 60}u`)).join(', ')} · ${recs.length} coins gevolgd</p>
-    ${table('Per uitkomst in de pipeline', stageRows, 'Uitkomst')}
-    ${table('Security afkeur-redenen (welke check houdt rugs tegen, welke winnaars?)', secReasons, 'Reden')}
-    ${table('Sniper filter-redenen', filtReasons.slice(0, 10), 'Reden')}
-    ${table('Per exchange', exRows, 'Exchange')}
-    ${table('Per bron', srcRows, 'Bron')}
-    ${table('Per sniper score', scoreRows, 'Score')}
-    <div class="sectionlbl">Laatst gevolgde coins</div>
-    ${recent.length ? `<table><thead><tr><th>Token</th><th>Bron</th><th>Uitkomst</th><th class="r">Gezien</th><th class="r">15m</th><th class="r">1u</th><th class="r">6u</th><th class="r">Max</th><th></th></tr></thead><tbody>
+    <article class="card"><header class="card-head"><div class="title"><h2>Inzichten</h2>
+      <p>Winnaar = ooit ≥ +${WIN_PCT}% na eerste keer gezien · Rug = prijs ≤ ${RUG_PCT}% of liquiditeit −80% · metingen na ${CHECKPOINTS.map((c) => (c < 60 ? `${c}m` : `${c / 60}u`)).join(', ')}</p></div></header>
+      <div class="body"><div class="insights">${ins.map(([k, t]) => `<div class="insight ${k}">${k === 'ok' ? '✅' : k === 'warn' ? '⚠️' : '💡'} ${esc(t)}</div>`).join('')}</div></div></article>
+    ${table('Per uitkomst in de pipeline', stageRows, 'Uitkomst', 'Doen bevestigde coins het beter dan afgekeurde?')}
+    ${table('Security afkeur-redenen', secReasons, 'Reden', 'Hoge rug% = goede check · hoge winnaar% = houdt winnaars tegen')}
+    <div class="agrid">
+      ${table('Sniper filter-redenen', filtReasons.slice(0, 10), 'Reden')}
+      ${table('Per exchange', exRows, 'Exchange')}
+      ${table('Per bron', srcRows, 'Bron')}
+      ${table('Per sniper score', scoreRows, 'Score')}
+    </div>
+    <article class="card"><header class="card-head"><div class="title"><h2>Laatst gevolgde coins</h2><p>Klik voor details</p></div></header><div class="body">
+    ${recent.length ? `<table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Uitkomst</th><th class="r">Gezien</th><th class="r">15m</th><th class="r">1u</th><th class="r">6u</th><th class="r">Max</th><th></th></tr></thead><tbody>
       ${recent.map((r) => `<tr class="click" data-mint="${esc(r.mint)}">
         <td class="sym">${esc(r.sym)}</td><td>${esc(r.origin)}</td><td>${esc(STAGES[r.stage] || r.stage)}</td>
         <td class="r">${ago(Date.now() - r.t0)}</td>
         <td class="r">${pctCell(r.cp[15])}</td><td class="r">${pctCell(r.cp[60])}</td><td class="r">${pctCell(r.cp[360])}</td>
         <td class="r">${r.last == null ? '—' : pctCell(r.max)}</td>
-        <td>${r.rug ? '<span class="pill fail">rug</span>' : r.max >= WIN_PCT ? '<span class="pill pass">winnaar</span>' : ''}</td>
-      </tr>`).join('')}</tbody></table>` : '<div class="empty">Nog niets gevolgd. Start de Sniper; elke gescande coin wordt automatisch gevolgd.</div>'}`;
+        <td>${r.rug ? '<span class="chip bad">💀 rug</span>' : r.max >= WIN_PCT ? '<span class="chip good">🏆 winnaar</span>' : ''}</td>
+      </tr>`).join('')}</tbody></table>` : '<div class="empty big">🔬 Nog niets gevolgd. Start de Sniper; elke gescande coin wordt automatisch gevolgd.</div>'}
+    </div></article>`;
 }
 
 // ---------- CSV export ----------

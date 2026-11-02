@@ -97,20 +97,70 @@ function buildForms() {
   }
 }
 
-// ---------- renderers ----------
-function renderStats() {
+// ---------- shared UI pieces ----------
+const hue = (str) => { let h = 7; for (const c of String(str)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const avatar = (sym, mint, big = false) => `<span class="av${big ? ' big' : ''}" style="--h:${hue(mint || sym || '?')}">${esc(String(sym || '?').replace(/^\$/, '').slice(0, 2).toUpperCase())}</span>`;
+const tokenCell = (sym, mint, extra = '') => `<div class="tok">${avatar(sym, mint)}<div class="tok-txt"><b>${esc(sym || '?')}</b><span class="mint">${short(mint)}${extra}</span></div></div>`;
+const scoreTone = (v) => (v >= 70 ? 'good' : v >= 50 ? 'mid' : 'low');
+function ring(v, tone = scoreTone(v), label = Math.round(v || 0)) {
+  const r = 16, c = 2 * Math.PI * r, f = Math.max(0, Math.min(100, v || 0)) / 100;
+  return `<svg class="ring ${tone}" viewBox="0 0 40 40" role="img" aria-label="${esc(label)}"><circle cx="20" cy="20" r="${r}" class="bg"/><circle cx="20" cy="20" r="${r}" class="fg" stroke-dasharray="${(f * c).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 20 20)"/><text x="20" y="24" text-anchor="middle">${esc(label)}</text></svg>`;
+}
+const chip = (text, tone = '') => `<span class="chip ${tone}">${text}</span>`;
+const kpiHtml = (items) => items.map(([icon, label, value, sub = '', tone = '']) => `
+  <div class="kpi ${tone}"><span class="kpi-icon">${icon}</span><div class="kpi-txt"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${sub ? `<div class="kpi-sub">${sub}</div>` : ''}</div></div>`).join('');
+const setKpis = (sel, items) => { const el = $(sel); if (el) el.innerHTML = kpiHtml(items); };
+function miniSpark(vals, w = 120, h = 28) {
+  if (vals.length < 2) return '';
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || Math.abs(hi) * 0.01 || 1;
+  const d = vals.map((v, i) => `${i ? 'L' : 'M'}${((i / (vals.length - 1)) * w).toFixed(1)},${(h - 2 - ((v - lo) / span) * (h - 4)).toFixed(1)}`).join('');
+  return `<svg class="mspark ${vals[vals.length - 1] >= vals[0] ? 'up' : 'down'}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d}"/></svg>`;
+}
+
+function renderKpis() {
+  const pass = sniper.results.filter((r) => r.pass).length;
+  const l = sniper.live;
+  setKpis('[data-bot="sniper"] [data-kpis]', [
+    ['🎯', 'Kandidaten', pass, `van ${sniper.results.length} gescand`, 'accent'],
+    ['🆕', 'Live launches', l.creates, `${sniper.launches.size} in de wacht`],
+    ['🎓', 'Migraties', l.migrations, 'naar PumpSwap'],
+    ['📡', 'Live feed', esc(l.status), l.lastMsg ? `laatste ${ago(Date.now() - l.lastMsg)} geleden` : '', l.status === 'verbonden' ? 'good' : l.status === 'uit' ? '' : 'warn'],
+    ['⏱', 'Laatste check', sniper.lastRun ? ago(Date.now() - sniper.lastRun) : '—', `lijst-scan #${sniper.scans}`],
+  ]);
+  const st = security.stats, done = st.pass + st.fail;
+  const checking = [...tokens.values()].find((t) => t.stage === 'security');
+  setKpis('[data-bot="security"] [data-kpis]', [
+    ['✅', 'Veilig', st.pass, 'door naar real check', 'good'],
+    ['⛔', 'Afgekeurd', st.fail, 'gestopt', 'bad'],
+    ['📊', 'Slagingskans', done ? `${Math.round((st.pass / done) * 100)}%` : '—', `${done} gecheckt`],
+    ['⏳', 'Wachtrij', security.queue.length, 'coins wachten'],
+    ['🔍', 'Nu bezig', checking ? esc(checking.symbol || short(checking.mint)) : '—', checking ? 'wordt gecheckt' : 'idle'],
+  ]);
+  const conf = real.done.filter((t) => t.stage !== 'rejected');
+  const avg = conf.length ? Math.round(conf.reduce((a, t) => a + (t.rank || 0), 0) / conf.length) : null;
+  setKpis('[data-bot="real"] [data-kpis]', [
+    ['👀', 'In observatie', real.watch.length, `${settings.real.rounds} rondes × ${settings.real.intervalSec}s`, 'accent'],
+    ['🏆', 'Bevestigd', conf.length, 'naar paper trader', 'gold'],
+    ['✖', 'Afgewezen', real.done.length - conf.length, 'niet echt genoeg', 'bad'],
+    ['⭐', 'Gem. totaalscore', avg ?? '—', 'van bevestigde coins'],
+  ]);
   const s = trader.stats();
-  const items = [
-    ['Paper saldo', sol(s.balance)],
-    ['Equity', sol(s.equity)],
-    ['Totaal P&L', pct(s.totalPct, 2)],
-    ['Gerealiseerd', `<span class="${s.realized >= 0 ? 'pos' : 'neg'}">${s.realized >= 0 ? '+' : ''}${s.realized.toFixed(4)} ◎</span>`],
-    ['Open posities', `${paper.positions.length} · ${sol(s.open)}`],
-    ['Win rate', `${s.winRate.toFixed(0)}% <small class="mint">(${s.trades} trades)</small>`],
-    ['SOL prijs', s.solUsd ? `$${s.solUsd.toFixed(2)}` : '—'],
-  ];
-  const html = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
-  $$('.stats').forEach((el) => { el.innerHTML = html; });
+  setKpis('[data-bot="paper"] [data-kpis]', [
+    ['💼', 'Equity', sol(s.equity, 3), pct(s.totalPct, 2), s.totalPct >= 0 ? 'good' : 'bad'],
+    ['💰', 'Vrij saldo', sol(s.balance, 3), `start ${paper.startSol} ◎`],
+    ['📈', 'Gerealiseerd', `<span class="${s.realized >= 0 ? 'pos' : 'neg'}">${s.realized >= 0 ? '+' : ''}${s.realized.toFixed(4)} ◎</span>`, `${s.trades} trades`],
+    ['🎯', 'Win rate', s.trades ? `${Math.round(s.winRate)}%` : '—', `${paper.history.filter((t) => t.pnlSol > 0).length} gewonnen`],
+    ['📂', 'Open posities', `${paper.positions.length}/${settings.paper.maxPos}`, sol(s.open, 3)],
+    ['◎', 'SOL prijs', s.solUsd ? `$${s.solUsd.toFixed(2)}` : '—', 'Jupiter'],
+  ]);
+  const recs = tracker.list(), a = agg(recs);
+  setKpis('[data-kpis-analyse]', [
+    ['🧾', 'Gevolgd', recs.length, 'coins'],
+    ['📏', 'Gemeten', a.m, '≥ 15 min data'],
+    ['🏆', 'Winnaar', a.win == null ? '—' : `${Math.round(a.win)}%`, 'ooit ≥ +50%', 'good'],
+    ['💀', 'Rug', a.rug == null ? '—' : `${Math.round(a.rug)}%`, '≤ −80% of liq weg', 'bad'],
+    ['⏱', 'Mediaan 1u', a.med60 == null ? '—' : pct(a.med60), 'na eerste keer gezien'],
+  ]);
 }
 
 const confirmedCount = () => real.done.filter((t) => t.real && t.stage !== 'rejected').length;
@@ -282,103 +332,118 @@ function renderEquity() {
   }
 }
 
+let sniperFilter = 'all';
+const SNIPER_FILTERS = [
+  ['all', 'Alle', () => true],
+  ['cand', '🎯 Kandidaten', (r) => r.pass],
+  ['launch', '🆕 Launches', (r) => r.origin === 'launch'],
+  ['migratie', '🎓 Migraties', (r) => r.origin === 'migratie'],
+  ['lijst', '📋 Lijsten', (r) => (r.origin || 'lijst') === 'lijst'],
+];
+const srcBadge = (r) => {
+  const o = r.origin || 'lijst';
+  const label = o === 'launch' ? '🆕 Launch' : o === 'migratie' ? '🎓 Migratie' : '📋 Lijst';
+  return `<div class="src"><span class="chip ${o}">${label}</span><span class="mint">${esc(r.dex || '')}${r.curve ? ' · curve' : ''}</span></div>`;
+};
+
 function renderSniper() {
-  const rows = sniper.results.slice(0, 40);
-  $('[data-bot="sniper"] [data-body]').innerHTML = liveFeedLine() + (rows.length ? `
-    <table><thead><tr><th>Token</th><th>Bron</th><th>Score</th><th class="r" title="Bij bonding curve: ~20% van market cap">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th><th>Status</th></tr></thead>
+  $('[data-filters="sniper"]').innerHTML = SNIPER_FILTERS.map(([k, l, f]) =>
+    `<button class="fchip ${sniperFilter === k ? 'on' : ''}" data-filter="${k}">${l} <span>${sniper.results.filter(f).length}</span></button>`).join('');
+  const f = (SNIPER_FILTERS.find((x) => x[0] === sniperFilter) || SNIPER_FILTERS[0])[2];
+  const rows = sniper.results.filter(f).slice(0, 50);
+  $('[data-bot="sniper"] [data-body]').innerHTML = rows.length ? `
+    <table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Score</th><th class="r" title="Bij bonding curve: ~20% van market cap">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th><th>Status</th></tr></thead>
     <tbody>${rows.map((r) => `
       <tr class="click ${r.pass ? '' : 'dim'}" data-mint="${esc(r.mint)}">
-        <td><span class="sym">${esc(r.symbol)}</span><div class="mint">${short(r.mint)}</div></td>
-        <td>${srcTag(r.origin)} <span class="mint">${esc(r.dex || '')}${r.curve ? ' · curve' : ''}</span></td>
-        <td>${r.score} ${bar(r.score)}</td>
+        <td>${tokenCell(r.symbol, r.mint)}</td>
+        <td>${srcBadge(r)}</td>
+        <td>${ring(r.score)}</td>
         <td class="r">$${fmt(r.liq)}</td><td class="r">$${fmt(r.volH1)}</td>
         <td class="r">${r.bs.toFixed(2)}</td><td class="r">${pct(r.mom, 0)}</td>
         <td class="r">${r.ageH < 999 ? ago(r.ageH * 3.6e6) : '?'}</td>
-        <td>${r.pass ? pill('pass', 'kandidaat') : `<span class="reason" title="${esc(r.reason)}">${esc(r.reason)}</span>`}</td>
-      </tr>`).join('')}</tbody></table>
-    <p class="mint">📋 lijst · 🆕 live launch · 🎓 migratie — lijst-scan #${sniper.scans} · laatste check ${sniper.lastRun ? ago(Date.now() - sniper.lastRun) + ' geleden' : '—'}</p>`
-    : `<div class="empty">${sniper.busy ? 'Scannen…' : 'Nog geen scan. Klik op Start of Nu scannen.'}</div>`);
+        <td>${r.pass ? chip('✓ kandidaat', 'good') : `<span class="reason" title="${esc(r.reason)}">${esc(r.reason)}</span>`}</td>
+      </tr>`).join('')}</tbody></table>`
+    : `<div class="empty big">${sniper.busy ? '⏳ Scannen…' : sniper.results.length ? 'Geen coins in dit filter.' : '🎯 Nog geen scan. Klik op Start of Nu scannen.'}</div>`;
 }
 
 function renderSecurity() {
   const q = security.queue;
-  const rows = security.checked.slice(0, 25);
-  const counts = (t) => {
-    const c = t.security?.checks || [];
-    return { f: c.filter((x) => x.status === 'fail').length, w: c.filter((x) => x.status === 'warn').length };
-  };
+  const cards = security.checked.slice(0, 30);
   $('[data-bot="security"] [data-body]').innerHTML = `
-    <div class="sectionlbl">Wachtrij (${q.length})</div>
-    <div>${q.length ? q.map((t) => pill('info', t.symbol || short(t.mint))).join(' ') : '<span class="mint">leeg</span>'}</div>
-    <div class="sectionlbl">Gecontroleerd</div>
-    ${rows.length ? `<table><thead><tr><th>Token</th><th>Score</th><th class="r">Round-trip</th><th>Fails / warns</th><th>Resultaat</th></tr></thead><tbody>
-    ${rows.map((t) => { const c = counts(t); const ok = t.stage !== 'rejected' || !t.security?.checks?.some((x) => x.status === 'fail'); return `
-      <tr class="click" data-mint="${esc(t.mint)}">
-        <td><span class="sym">${esc(t.symbol || '?')}</span><div class="mint">${short(t.mint)}</div></td>
-        <td>${t.security.score} ${bar(t.security.score)}</td>
-        <td class="r">${t.security.roundTrip == null ? '—' : t.security.roundTrip.toFixed(1) + '%'}</td>
-        <td>${c.f ? pill('fail', c.f + ' fail') : ''} ${c.w ? pill('warn', c.w + ' warn') : ''} ${!c.f && !c.w ? pill('pass', 'schoon') : ''}</td>
-        <td>${ok ? pill('pass', 'veilig') : `<span class="reason" title="${esc(t.rejectReason)}">${esc(t.rejectReason)}</span>`}</td>
-      </tr>`; }).join('')}</tbody></table>` : '<div class="empty">Nog niets gecontroleerd.</div>'}`;
+    <div class="sectionlbl">Wachtrij · ${q.length}</div>
+    <div class="queue">${q.length ? q.map((t) => `<span class="qchip click" data-mint="${esc(t.mint)}">${avatar(t.symbol, t.mint)}${esc(t.symbol || short(t.mint))}</span>`).join('') : '<span class="mint">leeg</span>'}</div>
+    <div class="sectionlbl">Gecontroleerd · ${security.checked.length}</div>
+    ${cards.length ? `<div class="tgrid">${cards.map((t) => {
+      const c = t.security?.checks || [];
+      const fails = c.filter((x) => x.status === 'fail'), warns = c.filter((x) => x.status === 'warn');
+      const ok = !fails.length;
+      return `<div class="tcard click ${ok ? 'ok' : 'bad'}" data-mint="${esc(t.mint)}">
+        <div class="tc-head">${tokenCell(t.symbol, t.mint)}${ring(t.security.score)}</div>
+        <div class="tc-chips">${chip(`✓ ${c.length - fails.length - warns.length}`, 'good')}${warns.length ? chip(`! ${warns.length}`, 'warn') : ''}${fails.length ? chip(`✗ ${fails.length}`, 'bad') : ''}${t.security.roundTrip != null ? chip(`round-trip ${t.security.roundTrip.toFixed(1)}%`) : ''}</div>
+        <ul class="tc-list">${ok ? `<li class="good">✓ Alle harde checks OK${warns.length ? ` (${warns.length} waarschuwing${warns.length > 1 ? 'en' : ''})` : ''}</li>` : fails.slice(0, 3).map((x) => `<li class="bad">✗ ${esc(x.name.replace(/^Risico: /, ''))}</li>`).join('')}${fails.length > 3 ? `<li class="mint">+${fails.length - 3} meer</li>` : ''}</ul>
+        <div class="tc-foot">${ok ? chip('🛡️ veilig', 'good') : chip('⛔ afgekeurd', 'bad')}<span class="mint">${t.security.at ? ago(Date.now() - t.security.at) + ' geleden' : ''}</span></div>
+      </div>`; }).join('')}</div>` : '<div class="empty big">🛡️ Nog niets gecontroleerd.</div>'}`;
 }
 
 function renderReal() {
   const s = settings.real;
-  const w = real.watch;
-  const done = real.done.slice(0, 20);
+  const done = real.done.slice(0, 24);
   $('[data-bot="real"] [data-body]').innerHTML = `
-    <div class="sectionlbl">Wordt geobserveerd (${w.length})</div>
-    ${w.length ? `<table><thead><tr><th>Token</th><th>Ronde</th><th class="r">Prijs</th><th class="r">Liq</th><th class="r">Volgende</th></tr></thead><tbody>
-      ${w.map((x) => { const a = x.snaps[0], b = x.snaps[x.snaps.length - 1]; return `
-        <tr class="click" data-mint="${esc(x.mint)}">
-          <td class="sym">${esc(x.symbol || short(x.mint))}</td>
-          <td>${x.snaps.length}/${s.rounds} ${bar((x.snaps.length / s.rounds) * 100)}</td>
-          <td class="r">${a && b && a.price ? pct((b.price / a.price - 1) * 100) : '—'}</td>
-          <td class="r">${a && b && a.liq ? pct((b.liq / a.liq - 1) * 100) : '—'}</td>
-          <td class="r">${x.next ? ago(Math.max(0, x.next - Date.now())) : 'nu'}</td>
-        </tr>`; }).join('')}</tbody></table>` : '<div class="mint">Geen tokens in observatie.</div>'}
-    <div class="sectionlbl">Resultaat</div>
-    ${done.length ? `<table><thead><tr><th>Token</th><th>Real score</th><th>Totaal</th><th>Resultaat</th></tr></thead><tbody>
-      ${done.map((t) => `
-        <tr class="click" data-mint="${esc(t.mint)}">
-          <td class="sym">${esc(t.symbol || short(t.mint))}</td>
-          <td>${t.real.score} ${bar(t.real.score)}</td><td><b>${t.rank ?? '—'}</b></td>
-          <td>${t.stage === 'rejected' ? `<span class="reason" title="${esc(t.rejectReason)}">${esc(t.rejectReason)}</span>` : pill('pass', '🏆 bevestigd')}</td>
-        </tr>`).join('')}</tbody></table>` : '<div class="empty">Nog geen resultaten.</div>'}`;
+    <div class="sectionlbl">In observatie · ${real.watch.length}</div>
+    ${real.watch.length ? `<div class="tgrid">${real.watch.map((w) => {
+      const a = w.snaps[0], b = w.snaps[w.snaps.length - 1];
+      return `<div class="tcard click watch" data-mint="${esc(w.mint)}">
+        <div class="tc-head">${tokenCell(w.symbol, w.mint)}${ring((w.snaps.length / s.rounds) * 100, 'accent', `${w.snaps.length}/${s.rounds}`)}</div>
+        ${miniSpark(w.snaps.map((x) => x.price)) || '<div class="mint">wacht op eerste meting…</div>'}
+        <div class="tc-chips">${a && b && a.price ? chip(`prijs ${pct((b.price / a.price - 1) * 100)}`) : ''}${a && b && a.liq ? chip(`liq ${pct((b.liq / a.liq - 1) * 100)}`) : ''}${b ? chip(`B/S ${((b.bsM5 + b.bsH1) / 2).toFixed(2)}`) : ''}</div>
+        <div class="tc-foot">${chip('👀 observeren', 'accent')}<span class="mint">volgende ${w.next ? ago(Math.max(0, w.next - Date.now())) : 'nu'}</span></div>
+      </div>`; }).join('')}</div>` : '<div class="empty">Geen coins in observatie.</div>'}
+    <div class="sectionlbl">Resultaten · ${real.done.length}</div>
+    ${done.length ? `<div class="tgrid">${done.map((t) => {
+      const ok = t.stage !== 'rejected' || !t.real.checks.some((c) => c.status === 'fail');
+      const fails = t.real.checks.filter((c) => c.status === 'fail');
+      return `<div class="tcard click ${ok ? 'gold' : 'bad'}" data-mint="${esc(t.mint)}">
+        <div class="tc-head">${tokenCell(t.symbol, t.mint)}${ring(t.real.score)}</div>
+        <div class="tc-total"><span>Totaalscore</span><b>${t.rank ?? '—'}</b></div>
+        <ul class="tc-list">${ok ? t.real.checks.slice(0, 3).map((c) => `<li class="${c.status === 'pass' ? 'good' : 'warn'}">${c.status === 'pass' ? '✓' : '!'} ${esc(c.name)} <span class="mint">${esc(c.detail)}</span></li>`).join('') : fails.slice(0, 3).map((c) => `<li class="bad">✗ ${esc(c.name)} <span class="mint">${esc(c.detail)}</span></li>`).join('')}</ul>
+        <div class="tc-foot">${ok ? chip('🏆 bevestigd', 'gold') : chip('✖ afgewezen', 'bad')}<span class="mint">${ago(Date.now() - t.real.at)} geleden</span></div>
+      </div>`; }).join('')}</div>` : '<div class="empty big">👀 Nog geen resultaten.</div>'}`;
 }
 
 function renderPaper() {
+  const s = settings.paper;
   const pos = paper.positions;
   const sig = trader.signals.filter((t) => !pos.some((p) => p.mint === t.mint));
+  const span = s.tp + s.sl;
+  const at = (v) => Math.max(0, Math.min(100, ((v + s.sl) / span) * 100));
   $('[data-bot="paper"] [data-body]').innerHTML = `
-    <div class="sectionlbl">Open posities (${pos.length}/${settings.paper.maxPos})</div>
-    ${pos.length ? `<table><thead><tr><th>Token</th><th class="r">In</th><th class="r">Waarde</th><th class="r">P&L</th><th class="r">Piek</th><th class="r">Tijd</th><th></th></tr></thead><tbody>
-      ${pos.map((p) => `
-        <tr>
-          <td class="click" data-mint="${esc(p.mint)}"><span class="sym">${esc(p.symbol)}</span><div class="mint">${short(p.mint)}</div></td>
-          <td class="r">${sol(p.entrySol)}</td><td class="r">${sol(p.lastValueSol)}</td>
-          <td class="r">${pct(p.pnlPct)}</td><td class="r">${pct(p.peakPct)}</td>
-          <td class="r">${ago(Date.now() - p.entryTs)}</td>
-          <td><button class="btn small" data-close="${esc(p.id)}">Verkoop</button></td>
-        </tr>`).join('')}</tbody></table>` : '<div class="mint">Geen open posities.</div>'}
+    <div class="sectionlbl">Open posities · ${pos.length}/${s.maxPos}</div>
+    ${pos.length ? `<div class="tgrid wide">${pos.map((p) => `
+      <div class="tcard pcard ${p.pnlPct >= 0 ? 'ok' : 'bad'}">
+        <div class="tc-head"><div class="click" data-mint="${esc(p.mint)}">${tokenCell(p.symbol, p.mint)}</div><div class="pnl ${p.pnlPct >= 0 ? 'pos' : 'neg'}">${p.pnlPct >= 0 ? '+' : ''}${p.pnlPct.toFixed(1)}%</div></div>
+        <div class="range" title="Stop loss -${s.sl}% · Take profit +${s.tp}%">
+          <div class="range-track"><i class="zero" style="left:${at(0)}%"></i><i class="peak" style="left:${at(p.peakPct)}%" title="piek"></i><i class="now ${p.pnlPct >= 0 ? 'up' : 'down'}" style="left:${at(p.pnlPct)}%"></i></div>
+          <div class="range-lbl"><span>SL −${s.sl}%</span><span>0</span><span>TP +${s.tp}%</span></div>
+        </div>
+        <div class="tc-chips">${chip(`in ${sol(p.entrySol)}`)}${chip(`nu ${sol(p.lastValueSol)}`)}${chip(`piek ${p.peakPct >= 0 ? '+' : ''}${p.peakPct.toFixed(1)}%`)}${chip(`⏱ ${ago(Date.now() - p.entryTs)}`)}</div>
+        <div class="tc-foot"><a href="${dexUrl(p.mint)}" target="_blank" rel="noopener" class="mint">DexScreener ↗</a><button class="btn small" data-close="${esc(p.id)}">Verkoop</button></div>
+      </div>`).join('')}</div>` : '<div class="empty big">📂 Geen open posities.</div>'}
     <div class="sectionlbl">Signalen (bevestigd, niet gekocht)</div>
-    ${sig.length ? `<table><tbody>${sig.map((t) => `
-        <tr><td class="sym click" data-mint="${esc(t.mint)}">${esc(t.symbol)}</td><td>totaal score <b>${t.rank}</b></td>
-        <td class="r"><button class="btn small primary" data-buy="${esc(t.mint)}">Paper buy ${settings.paper.sizeSol} ◎</button></td></tr>`).join('')}</tbody></table>`
-      : `<div class="mint">${settings.paper.autoTrade ? 'Auto-trade aan: bevestigde coins worden direct gekocht zolang de trader draait.' : 'Nog geen signalen.'}</div>`}`;
+    ${sig.length ? `<div class="queue">${sig.map((t) => `<span class="qchip">${avatar(t.symbol, t.mint)}<b class="click" data-mint="${esc(t.mint)}">${esc(t.symbol)}</b> <span class="mint">score ${t.rank}</span><button class="btn small primary" data-buy="${esc(t.mint)}">Buy ${s.sizeSol} ◎</button></span>`).join('')}</div>`
+      : `<div class="mint">${s.autoTrade ? 'Auto-trade aan: bevestigde coins worden direct gekocht zolang de trader draait.' : 'Nog geen signalen.'}</div>`}`;
 }
 
 function renderHistory() {
-  const h = paper.history.slice(0, 50);
+  const h = paper.history.slice(0, 60);
   $('#history').innerHTML = h.length ? `
-    <table><thead><tr><th>Token</th><th>Gekocht</th><th class="r">In</th><th class="r">Uit</th><th class="r">P&L</th><th class="r">Duur</th><th>Reden</th></tr></thead><tbody>
+    <table class="nice"><thead><tr><th>Token</th><th>Gekocht</th><th class="r">In</th><th class="r">Uit</th><th class="r">P&L</th><th class="r">Duur</th><th>Reden</th></tr></thead><tbody>
     ${h.map((t) => `
       <tr class="click" data-mint="${esc(t.mint)}">
-        <td class="sym">${esc(t.symbol)}</td><td>${new Date(t.entryTs).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}</td>
+        <td>${tokenCell(t.symbol, t.mint)}</td><td>${new Date(t.entryTs).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}</td>
         <td class="r">${sol(t.entrySol)}</td><td class="r">${sol(t.exitSol)}</td>
-        <td class="r">${pct(t.pnlPct)} <span class="mint">${t.pnlSol >= 0 ? '+' : ''}${t.pnlSol.toFixed(4)}</span></td>
+        <td class="r">${chip(`${t.pnlPct >= 0 ? '+' : ''}${t.pnlPct.toFixed(1)}%`, t.pnlSol >= 0 ? 'good' : 'bad')} <span class="mint">${t.pnlSol >= 0 ? '+' : ''}${t.pnlSol.toFixed(4)}</span></td>
         <td class="r">${ago(t.exitTs - t.entryTs)}</td><td class="reason" title="${esc(t.reason)}">${esc(t.reason)}</td>
-      </tr>`).join('')}</tbody></table>` : '<div class="empty">Nog geen gesloten paper trades.</div>';
+      </tr>`).join('')}</tbody></table>` : '<div class="empty big">📜 Nog geen gesloten paper trades.</div>';
 }
 
 let pending = false;
@@ -387,7 +452,7 @@ function render() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderStats(); renderFlow();
+    renderKpis(); renderFlow();
     Object.keys(bots).forEach(renderBotHead);
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
@@ -411,33 +476,41 @@ on('log', ({ bot, msg, level, ts }) => {
 });
 
 // ---------- detail dialog ----------
-function checkTable(checks) {
-  return `<table class="checklist"><tbody>${checks.map((c) => `<tr><td>${pill(c.status, c.status === 'pass' ? 'OK' : c.status.toUpperCase())}</td><td><b>${esc(c.name)}</b><div class="mint">${esc(c.detail)}</div></td></tr>`).join('')}</tbody></table>`;
+function checkList(checks) {
+  const icon = { pass: '✓', warn: '!', fail: '✗' };
+  return `<ul class="checks">${checks.map((c) => `<li class="${c.status}"><span class="ci">${icon[c.status] || '•'}</span><div><b>${esc(c.name)}</b><div class="mint">${esc(c.detail)}</div></div></li>`).join('')}</ul>`;
 }
 function showDetail(mint) {
   const t = tokens.get(mint) || { mint, ...(sniper.results.find((r) => r.mint === mint) || {}) };
+  const rec = tracker.records[mint];
   const p = t.pair;
+  const stageLabel = { 'security-queue': 'wacht op security', security: 'in security', 'watch-queue': 'naar real check', watching: 'in observatie', confirmed: 'bevestigd', traded: 'gekocht', rejected: 'afgekeurd' };
+  const scores = [['Sniper', t.sniperScore ?? t.score], ['Security', t.security?.score], ['Real', t.real?.score], ['Totaal', t.rank]].filter(([, v]) => v != null);
   $('#detailBody').innerHTML = `
-    <h3>${esc(t.symbol || '?')} <span class="mint">${esc(t.name || '')}</span></h3>
-    <div class="mint">${esc(mint)}</div>
+    <div class="dlg-head">${avatar(t.symbol || rec?.sym, mint, true)}<div><h3>${esc(t.symbol || rec?.sym || '?')} <span class="mint">${esc(t.name || '')}</span></h3>
+      <div class="mint">${esc(mint)}</div>
+      <div class="tc-chips">${chip(esc(stageLabel[t.stage] || t.stage || 'gescand'), t.stage === 'rejected' ? 'bad' : t.stage === 'traded' || t.stage === 'confirmed' ? 'gold' : 'accent')}${t.origin ? chip(esc(t.origin)) : ''}${p ? chip(esc(p.dexId)) : ''}</div></div></div>
+    ${t.rejectReason ? `<div class="insight warn">⛔ ${esc(t.rejectReason)}</div>` : ''}
+    ${scores.length ? `<div class="dlg-scores">${scores.map(([l, v]) => `<div>${ring(v)}<span>${l}</span></div>`).join('')}</div>` : ''}
+    ${p ? `<div class="kpis compact">${kpiHtml([
+      ['💵', 'Prijs', `$${esc(p.priceUsd)}`], ['💧', 'Liquiditeit', `$${fmt(p.liquidity?.usd || 0)}`], ['🏷', 'Market cap', `$${fmt(p.marketCap || p.fdv || 0)}`], ['📊', 'Volume 24u', `$${fmt(p.volume?.h24 || 0)}`],
+    ])}</div>` : ''}
+    ${rec ? `<div class="sectionlbl">Gemeten na eerste keer gezien</div><div class="tc-chips">${[[15, '15m'], [60, '1u'], [360, '6u']].map(([c, l]) => chip(`${l}: ${rec.cp[c] == null ? '—' : pct(rec.cp[c])}`)).join('')}${chip(`max ${pct(rec.max)}`)}${rec.rug ? chip('💀 rug', 'bad') : ''}</div>` : ''}
     <div class="links">
-      <a href="${dexUrl(mint)}" target="_blank" rel="noopener">DexScreener ↗</a>
-      <a href="https://rugcheck.xyz/tokens/${encodeURIComponent(mint)}" target="_blank" rel="noopener">RugCheck ↗</a>
-      <a href="https://solscan.io/token/${encodeURIComponent(mint)}" target="_blank" rel="noopener">Solscan ↗</a>
-      <a href="https://jup.ag/swap/SOL-${encodeURIComponent(mint)}" target="_blank" rel="noopener">Jupiter ↗</a>
+      <a class="btn small" href="${dexUrl(mint)}" target="_blank" rel="noopener">DexScreener ↗</a>
+      <a class="btn small" href="https://rugcheck.xyz/tokens/${encodeURIComponent(mint)}" target="_blank" rel="noopener">RugCheck ↗</a>
+      <a class="btn small" href="https://solscan.io/token/${encodeURIComponent(mint)}" target="_blank" rel="noopener">Solscan ↗</a>
+      <a class="btn small" href="https://jup.ag/swap/SOL-${encodeURIComponent(mint)}" target="_blank" rel="noopener">Jupiter ↗</a>
     </div>
-    ${p ? `<p>Prijs $${esc(p.priceUsd)} · Liq $${fmt(p.liquidity?.usd || 0)} · MC $${fmt(p.marketCap || p.fdv || 0)} · Vol 24u $${fmt(p.volume?.h24 || 0)} · DEX ${esc(p.dexId)}</p>` : ''}
-    <p>Status: ${pill(t.stage === 'rejected' ? 'fail' : 'info', t.stage || 'gescand')} ${t.rejectReason ? `<span class="mint">${esc(t.rejectReason)}</span>` : ''}
-       ${t.sniperScore != null ? ` · Sniper ${t.sniperScore}` : ''}${t.security ? ` · Security ${t.security.score}` : ''}${t.real ? ` · Real ${t.real.score}` : ''}${t.rank != null ? ` · <b>Totaal ${t.rank}</b>` : ''}</p>
-    ${t.security ? `<div class="sectionlbl">2 · Security check</div>${checkTable(t.security.checks)}` : ''}
-    ${t.real ? `<div class="sectionlbl">3 · Real check</div>${checkTable(t.real.checks)}` : ''}
-    ${!t.security && !tokens.has(mint) ? `<p><button class="btn primary" data-check="${esc(mint)}">Security check uitvoeren</button></p>` : ''}`;
+    ${t.security ? `<div class="sectionlbl">2 · Security check</div>${checkList(t.security.checks)}` : ''}
+    ${t.real ? `<div class="sectionlbl">3 · Real check</div>${checkList(t.real.checks)}` : ''}
+    ${!t.security && !tokens.has(mint) ? `<p><button class="btn primary" data-check="${esc(mint)}">🛡️ Security check uitvoeren</button></p>` : ''}`;
   $('#detail').showModal();
 }
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter]');
   if (!el) return;
   const card = el.closest('[data-bot],[data-mini]');
   if (el.hasAttribute('data-clear-log')) {
@@ -461,6 +534,9 @@ document.addEventListener('click', async (e) => {
     security.addManual(el.dataset.check).catch((err) => log('security', err.message, 'err'));
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
+  } else if (el.dataset.filter) {
+    sniperFilter = el.dataset.filter;
+    render();
   } else if (el.dataset.goto) {
     location.hash = `#/${el.dataset.goto}`;
   }
