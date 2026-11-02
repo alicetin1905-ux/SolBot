@@ -6,7 +6,7 @@
   <title>SolBot</title>
   <meta name="description" content="4 Solana bots: sniper, security check, real check en paper trading.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
-  <link rel="stylesheet" href="css/style.css?v=20261102182229">
+  <link rel="stylesheet" href="css/style.css?v=20261102182905">
 </head>
 <body>
   <header class="top">
@@ -190,7 +190,7 @@
   </div>
   <script>
     // Shows a visible message (instead of an empty page) when the app modules fail to load.
-    window.SOLBOT_VERSION = '20261102182229';
+    window.SOLBOT_VERSION = '20261102182905';
     (function () {
       var shown = false;
       function show(msg) {
@@ -202,12 +202,17 @@
       }
       window.addEventListener('error', function (e) { show(e && e.message ? 'Fout: ' + e.message : ''); });
       setTimeout(function () { show('De app reageerde niet binnen 8 seconden.'); }, 8000);
+      // Load the app via dynamic import: unlike a <script type=module> tag this gives
+      // the real error (e.g. a file blocked by an ad/content blocker) in every browser.
+      import('./js/app.js?v=' + window.SOLBOT_VERSION).catch(function (e) {
+        show('Fout bij laden: ' + ((e && e.message) || e) +
+          ' — Gebruik je een adblocker of contentblocker? Zet die dan uit voor deze site.');
+      });
       document.getElementById('bootReload').onclick = function () {
         var u = location.href.split('#')[0].split('?')[0];
         location.replace(u + '?r=' + Date.now() + location.hash);
       };
     })();
   </script>
-  <script type="module" src="js/app.js?v=20261102182229" onerror="document.getElementById('bootError').hidden=false"></script>
 </body>
 </html>

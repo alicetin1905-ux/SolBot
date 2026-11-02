@@ -1,11 +1,11 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log } from './store.js?v=20261102182229';
-import { SniperBot, fmt } from './sniper.js?v=20261102182229';
-import { SecurityBot } from './security.js?v=20261102182229';
-import { RealCheckBot } from './realcheck.js?v=20261102182229';
-import { PaperBot } from './paper.js?v=20261102182229';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261102182229';
-import { TrackerBot } from './tracker.js?v=20261102182229';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './analyse.js?v=20261102182229';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log } from './store.js?v=20261102182905';
+import { SniperBot, fmt } from './sniper.js?v=20261102182905';
+import { SecurityBot } from './security.js?v=20261102182905';
+import { RealCheckBot } from './realcheck.js?v=20261102182905';
+import { PaperBot } from './paper.js?v=20261102182905';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261102182905';
+import { TrackerBot } from './metingen.js?v=20261102182905';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261102182905';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
