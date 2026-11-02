@@ -1,9 +1,9 @@
 // Outcome tracker: follows every coin the sniper looked at (also the rejected
 // ones) and stores what its price did after 5m … 6h. This tells you whether the
 // filters keep the winners and block the rugs.
-import { Bot } from './bot.js';
-import * as api from './api.js';
-import { on } from './store.js';
+import { Bot } from './bot.js?v=20261102182229';
+import * as api from './api.js?v=20261102182229';
+import { on } from './store.js?v=20261102182229';
 
 export const CHECKPOINTS = [5, 15, 30, 60, 120, 240, 360]; // minutes
 export const WIN_PCT = 50;   // "winner" = ever >= +50% after first seen

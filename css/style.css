@@ -564,3 +564,13 @@ dialog .insight { margin-top: 12px; }
   .kpi-label { font-size: 10px; }
   .tgrid, .tgrid.wide { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* startup error banner */
+.boot-error {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 50; display: grid; gap: 6px;
+  padding: 14px 16px; border-radius: 14px; background: var(--panel); color: var(--text);
+  border: 1px solid var(--err); box-shadow: 0 10px 30px rgba(0,0,0,.4); font-size: 14px;
+}
+.boot-error[hidden] { display: none; }
+.boot-error span { color: var(--muted); }
+.boot-error .btn { justify-self: start; margin-top: 4px; }

@@ -1,11 +1,11 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log } from './store.js';
-import { SniperBot, fmt } from './sniper.js';
-import { SecurityBot } from './security.js';
-import { RealCheckBot } from './realcheck.js';
-import { PaperBot } from './paper.js';
-import { initFlow, updateFlow, exchangeOf } from './flow.js';
-import { TrackerBot } from './tracker.js';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './analyse.js';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log } from './store.js?v=20261102182229';
+import { SniperBot, fmt } from './sniper.js?v=20261102182229';
+import { SecurityBot } from './security.js?v=20261102182229';
+import { RealCheckBot } from './realcheck.js?v=20261102182229';
+import { PaperBot } from './paper.js?v=20261102182229';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261102182229';
+import { TrackerBot } from './tracker.js?v=20261102182229';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './analyse.js?v=20261102182229';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -598,6 +598,8 @@ document.addEventListener('keydown', (e) => {
 // ---------- boot ----------
 initFlow($('#flow'));
 tracker.start();
+window.__solbotStarted = true;
+document.getElementById('bootError').hidden = true;
 buildForms();
 route();
 setInterval(render, 3000);

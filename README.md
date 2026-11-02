@@ -35,3 +35,7 @@ PumpPortal (websocket) · DexScreener · RugCheck · Jupiter (lite-api) · Gecko
 ## Let op
 Dit is **alleen paper trading**: er is geen wallet en er wordt geen echt geld gebruikt.
 Geen enkele check is 100% waterdicht; memecoins zijn extreem risicovol. Geen financieel advies.
+
+## Ontwikkelen
+Draai `./tools/bump-version.sh` vóór elke commit die `js/` of `css/` wijzigt. Dat zet één versienummer op alle
+bestanden, zodat browsers na een update nooit oude en nieuwe bestanden door elkaar laden.

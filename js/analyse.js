@@ -1,6 +1,6 @@
 // Analyse page: turns tracker records into "do my filters work?" answers.
-import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './tracker.js';
-import { exchangeOf } from './flow.js';
+import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './tracker.js?v=20261102182229';
+import { exchangeOf } from './flow.js?v=20261102182229';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const median = (a) => {

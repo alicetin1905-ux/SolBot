@@ -6,7 +6,7 @@
   <title>SolBot</title>
   <meta name="description" content="4 Solana bots: sniper, security check, real check en paper trading.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261102182229">
 </head>
 <body>
   <header class="top">
@@ -174,7 +174,7 @@
     </section>
 
     <p class="disclaimer">
-      Alleen paper trading — er wordt geen echt geld of wallet gebruikt. Data: DexScreener, RugCheck, Jupiter, GeckoTerminal.
+      Alleen paper trading — er wordt geen echt geld of wallet gebruikt. Data: PumpPortal, DexScreener, RugCheck, Jupiter, GeckoTerminal.
       De bots draaien in je browser: laat dit tabblad open. Geen financieel advies; memecoins zijn extreem risicovol.
       <button class="linkbtn" id="resetSettings">Instellingen herstellen</button>
     </p>
@@ -182,6 +182,32 @@
 
   <dialog id="detail"><form method="dialog" class="dlg-close"><button class="btn ghost small" aria-label="Sluiten">✕</button></form><div id="detailBody"></div></dialog>
 
-  <script type="module" src="js/app.js"></script>
+  <div id="bootError" class="boot-error" hidden>
+    <b>⚠️ De app kon niet starten.</b>
+    <span id="bootErrorMsg"></span>
+    <span>Meestal komt dit door oude bestanden in de cache na een update.</span>
+    <button class="btn primary" id="bootReload">↻ Opnieuw laden</button>
+  </div>
+  <script>
+    // Shows a visible message (instead of an empty page) when the app modules fail to load.
+    window.SOLBOT_VERSION = '20261102182229';
+    (function () {
+      var shown = false;
+      function show(msg) {
+        if (window.__solbotStarted || shown) return;
+        shown = true;
+        var box = document.getElementById('bootError');
+        document.getElementById('bootErrorMsg').textContent = msg || '';
+        box.hidden = false;
+      }
+      window.addEventListener('error', function (e) { show(e && e.message ? 'Fout: ' + e.message : ''); });
+      setTimeout(function () { show('De app reageerde niet binnen 8 seconden.'); }, 8000);
+      document.getElementById('bootReload').onclick = function () {
+        var u = location.href.split('#')[0].split('?')[0];
+        location.replace(u + '?r=' + Date.now() + location.hash);
+      };
+    })();
+  </script>
+  <script type="module" src="js/app.js?v=20261102182229" onerror="document.getElementById('bootError').hidden=false"></script>
 </body>
 </html>

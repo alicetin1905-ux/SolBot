@@ -1,6 +1,6 @@
-import { Bot } from './bot.js';
-import * as api from './api.js';
-import { settings, tokens, upsertToken, emit, log } from './store.js';
+import { Bot } from './bot.js?v=20261102182229';
+import * as api from './api.js?v=20261102182229';
+import { settings, tokens, upsertToken, emit, log } from './store.js?v=20261102182229';
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const PUMPPORTAL_WS = 'wss://pumpportal.fun/api/data';
