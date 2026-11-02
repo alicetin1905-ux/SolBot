@@ -17,6 +17,7 @@ on('confirmed', (t) => trader.onConfirmed(t));
 
 // ---------- helpers ----------
 const $ = (sel, el = document) => el.querySelector(sel);
+const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pct = (v, d = 1) => `<span class="${v >= 0 ? 'pos' : 'neg'}">${v >= 0 ? '+' : ''}${Number(v).toFixed(d)}%</span>`;
 const sol = (v, d = 3) => `${Number(v).toFixed(d)} ◎`;
@@ -97,31 +98,148 @@ function renderStats() {
     ['Win rate', `${s.winRate.toFixed(0)}% <small class="mint">(${s.trades} trades)</small>`],
     ['SOL prijs', s.solUsd ? `$${s.solUsd.toFixed(2)}` : '—'],
   ];
-  $('#stats').innerHTML = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  const html = items.map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
+  $$('.stats').forEach((el) => { el.innerHTML = html; });
 }
 
 function renderPipeline() {
   const all = [...tokens.values()];
   const st = (name) => all.filter((t) => t.stage === name).length;
   const stages = [
-    ['🎯 Gevonden', sniper.results.filter((r) => r.pass).length, `${sniper.results.length} gescand`],
-    ['🛡️ Security', security.queue.length + st('security'), `${security.stats.pass} ✓ · ${security.stats.fail} ✗`],
-    ['👀 Real check', real.watch.length, `${real.done.filter((t) => t.stage !== 'rejected').length} bevestigd`],
-    ['📈 Paper trades', paper.positions.length, `${paper.history.length} gesloten`],
+    ['sniper', '🎯 Kandidaten', sniper.results.filter((r) => r.pass).length, `${sniper.results.length} gescand`],
+    ['security', '🛡️ In security', security.queue.length + st('security'), `${security.stats.pass} ✓ · ${security.stats.fail} ✗`],
+    ['real', '👀 In observatie', real.watch.length, `${confirmedCount()} bevestigd`],
+    ['paper', '📈 Open trades', paper.positions.length, `${paper.history.length} gesloten`],
   ];
-  $('#pipeline').innerHTML = stages.map(([l, n, sub], i) =>
-    `${i ? '<div class="arrow">➜</div>' : ''}<div class="stage"><div><div class="lbl">${l}</div><div class="lbl">${sub}</div></div><b>${n}</b></div>`).join('');
+  $('#pipeline').innerHTML = stages.map(([route, l, n, sub], i) =>
+    `${i ? '<div class="arrow">➜</div>' : ''}<a class="stage" href="#/${route}"><div><div class="lbl">${l}</div><div class="lbl">${sub}</div></div><b>${n}</b></a>`).join('');
 }
+
+const confirmedCount = () => real.done.filter((t) => t.real && t.stage !== 'rejected').length;
 
 function renderBotHead(id) {
   const b = bots[id];
-  const card = $(`[data-bot="${id}"]`);
-  const status = $('[data-status]', card);
-  status.className = `status ${b.running ? 'run' : ''} ${b.busy ? 'busy' : ''}`;
-  status.textContent = b.running ? (b.busy ? 'bezig…' : 'actief') : 'gestopt';
-  const t = $('[data-toggle]', card);
-  t.textContent = b.running ? '■ Stop' : '▶ Start';
-  t.classList.toggle('on', b.running);
+  for (const card of $$(`[data-bot="${id}"],[data-mini="${id}"]`)) {
+    const status = $('[data-status]', card);
+    status.className = `status ${b.running ? 'run' : ''} ${b.busy ? 'busy' : ''}`;
+    status.textContent = b.running ? (b.busy ? 'bezig…' : 'actief') : 'gestopt';
+    const t = $('[data-toggle]', card);
+    t.textContent = b.running ? '■ Stop' : '▶ Start';
+    t.classList.toggle('on', b.running);
+  }
+  $(`[data-dot="${id}"]`).classList.toggle('run', b.running);
+  const counts = {
+    sniper: sniper.results.filter((r) => r.pass).length,
+    security: security.queue.length,
+    real: real.watch.length,
+    paper: paper.positions.length,
+  };
+  $(`[data-cnt="${id}"]`).textContent = counts[id] || '';
+}
+
+// ---------- dashboard mini cards ----------
+const metrics = (items) => `<div class="metrics">${items.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
+const miniBody = (id) => $(`[data-mini="${id}"] [data-mini-body]`);
+
+function renderMiniSniper() {
+  const pass = sniper.results.filter((r) => r.pass);
+  miniBody('sniper').innerHTML = metrics([
+    ['Gescand', sniper.results.length], ['Kandidaten', pass.length], ['Scans', sniper.scans],
+    ['Laatste scan', sniper.lastRun ? ago(Date.now() - sniper.lastRun) : '—'],
+  ]) + (pass.length ? `<table><thead><tr><th>Top kandidaten</th><th>Score</th><th class="r">Liq</th><th class="r">1u</th></tr></thead><tbody>
+    ${pass.slice(0, 5).map((r) => `<tr class="click" data-mint="${esc(r.mint)}"><td class="sym">${esc(r.symbol)}</td><td>${r.score} ${bar(r.score)}</td><td class="r">$${fmt(r.liq)}</td><td class="r">${pct(r.mom, 0)}</td></tr>`).join('')}
+    </tbody></table>` : `<div class="empty">${sniper.busy ? 'Scannen…' : 'Nog geen kandidaten.'}</div>`);
+}
+
+function renderMiniSecurity() {
+  const rows = security.checked.slice(0, 5);
+  miniBody('security').innerHTML = metrics([
+    ['Wachtrij', security.queue.length], ['Veilig', security.stats.pass], ['Afgekeurd', security.stats.fail],
+    ['Slagingskans', security.stats.pass + security.stats.fail ? `${Math.round(security.stats.pass / (security.stats.pass + security.stats.fail) * 100)}%` : '—'],
+  ]) + (rows.length ? `<table><thead><tr><th>Laatst gecheckt</th><th>Score</th><th>Resultaat</th></tr></thead><tbody>
+    ${rows.map((t) => { const fails = (t.security?.checks || []).filter((c) => c.status === 'fail'); return `<tr class="click" data-mint="${esc(t.mint)}"><td class="sym">${esc(t.symbol || short(t.mint))}</td><td>${t.security.score}</td>
+      <td>${fails.length ? `<span class="reason" title="${esc(fails.map((c) => c.name).join(', '))}">${esc(fails[0].name)}${fails.length > 1 ? ` +${fails.length - 1}` : ''}</span>` : pill('pass', 'veilig')}</td></tr>`; }).join('')}
+    </tbody></table>` : '<div class="empty">Nog niets gecontroleerd.</div>');
+}
+
+function renderMiniReal() {
+  const s = settings.real;
+  const done = real.done.slice(0, 5);
+  const rejected = real.done.filter((t) => t.stage === 'rejected').length;
+  miniBody('real').innerHTML = metrics([
+    ['Observatie', real.watch.length], ['Bevestigd', confirmedCount()], ['Afgewezen', rejected], ['Rondes', s.rounds],
+  ]) + (real.watch.length ? `<div class="sectionlbl">Nu in observatie</div><div>${real.watch.map((w) => pill('info', `${w.symbol || short(w.mint)} ${w.snaps.length}/${s.rounds}`)).join(' ')}</div>` : '')
+    + (done.length ? `<table><thead><tr><th>Resultaat</th><th>Real</th><th>Totaal</th><th></th></tr></thead><tbody>
+    ${done.map((t) => `<tr class="click" data-mint="${esc(t.mint)}"><td class="sym">${esc(t.symbol || short(t.mint))}</td><td>${t.real.score}</td><td><b>${t.rank ?? '—'}</b></td>
+      <td>${t.stage === 'rejected' ? pill('fail', 'afgewezen') : pill('pass', 'bevestigd')}</td></tr>`).join('')}
+    </tbody></table>` : (real.watch.length ? '' : '<div class="empty">Nog geen coins geobserveerd.</div>'));
+}
+
+function renderMiniPaper() {
+  const st = trader.stats();
+  const pos = paper.positions;
+  miniBody('paper').innerHTML = metrics([
+    ['Equity', sol(st.equity, 2)], ['P&L', pct(st.totalPct)], ['Open', `${pos.length}/${settings.paper.maxPos}`], ['Win rate', st.trades ? `${st.winRate.toFixed(0)}%` : '—'],
+  ]) + (pos.length ? `<table><thead><tr><th>Open positie</th><th class="r">Waarde</th><th class="r">P&L</th><th class="r">Tijd</th></tr></thead><tbody>
+    ${pos.slice(0, 5).map((p) => `<tr class="click" data-mint="${esc(p.mint)}"><td class="sym">${esc(p.symbol)}</td><td class="r">${sol(p.lastValueSol)}</td><td class="r">${pct(p.pnlPct)}</td><td class="r">${ago(Date.now() - p.entryTs)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Geen open posities.</div>');
+}
+
+function renderRecentTrades() {
+  const h = paper.history.slice(0, 6);
+  $('[data-recent-trades]').innerHTML = h.length ? `<table><thead><tr><th>Token</th><th class="r">P&L</th><th class="r">Duur</th><th>Reden</th></tr></thead><tbody>
+    ${h.map((t) => `<tr class="click" data-mint="${esc(t.mint)}"><td class="sym">${esc(t.symbol)}</td><td class="r">${pct(t.pnlPct)}</td><td class="r">${ago(t.exitTs - t.entryTs)}</td><td class="reason" title="${esc(t.reason)}">${esc(t.reason)}</td></tr>`).join('')}
+    </tbody></table>` : '<div class="empty">Nog geen gesloten trades.</div>';
+}
+
+// ---------- equity chart (single series SVG line + hover crosshair) ----------
+function renderEquity() {
+  const pts = [...paper.equityHist];
+  const live = trader.stats().equity;
+  pts.push({ t: Date.now(), v: live });
+  for (const el of $$('.equity-chart')) {
+    if (el.offsetParent === null) continue; // not visible
+    const W = el.clientWidth || 600, H = 200;
+    const key = `${W}|${pts.length}|${live.toFixed(5)}|${pts[0].t}`;
+    if (el.dataset.key === key) continue;
+    el.dataset.key = key;
+    const pad = { l: 44, r: 10, t: 10, b: 22 };
+    const t0 = pts[0].t, t1 = Math.max(pts[pts.length - 1].t, t0 + 1);
+    let lo = Math.min(paper.startSol, ...pts.map((p) => p.v)), hi = Math.max(paper.startSol, ...pts.map((p) => p.v));
+    const span = Math.max(hi - lo, paper.startSol * 0.01);
+    lo -= span * 0.1; hi += span * 0.1;
+    const x = (t) => pad.l + ((t - t0) / (t1 - t0)) * (W - pad.l - pad.r);
+    const y = (v) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
+    const area = `${line}L${x(t1).toFixed(1)},${H - pad.b}L${x(t0).toFixed(1)},${H - pad.b}Z`;
+    const ticks = [lo + (hi - lo) * 0.1, (lo + hi) / 2, hi - (hi - lo) * 0.1];
+    const tfmt = (t) => new Date(t).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Equity verloop in SOL">
+      ${ticks.map((v) => `<line class="grid-line" x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(2)}</text>`).join('')}
+      <line class="base-line" x1="${pad.l}" x2="${W - pad.r}" y1="${y(paper.startSol)}" y2="${y(paper.startSol)}"/>
+      <text x="${W - pad.r}" y="${y(paper.startSol) - 5}" text-anchor="end">start ${paper.startSol} ◎</text>
+      <path class="eq-area" d="${area}"/><path class="eq-line" d="${line}"/>
+      <text x="${pad.l}" y="${H - 5}">${tfmt(t0)}</text><text x="${W - pad.r}" y="${H - 5}" text-anchor="end">${tfmt(t1)}</text>
+      <g class="hover" visibility="hidden"><line class="cross" y1="${pad.t}" y2="${H - pad.b}"/><circle class="marker" r="5"/></g>
+      <rect x="${pad.l}" y="0" width="${W - pad.l - pad.r}" height="${H}" fill="transparent"/>
+    </svg><div class="tip" hidden></div>`;
+    const svg = $('svg', el), g = $('.hover', el), tip = $('.tip', el);
+    svg.addEventListener('pointermove', (e) => {
+      const r = svg.getBoundingClientRect();
+      const mx = ((e.clientX - r.left) / r.width) * W;
+      let best = pts[0];
+      for (const p of pts) if (Math.abs(x(p.t) - mx) < Math.abs(x(best.t) - mx)) best = p;
+      const px = x(best.t), py = y(best.v);
+      g.setAttribute('visibility', 'visible');
+      $('.cross', g).setAttribute('x1', px); $('.cross', g).setAttribute('x2', px);
+      $('.marker', g).setAttribute('cx', px); $('.marker', g).setAttribute('cy', py);
+      const chg = (best.v / paper.startSol - 1) * 100;
+      tip.hidden = false;
+      tip.style.left = `${(px / W) * r.width}px`; tip.style.top = `${(py / H) * r.height}px`;
+      tip.innerHTML = `${new Date(best.t).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}<br><b>${best.v.toFixed(4)} ◎</b> ${pct(chg, 2)}`;
+    });
+    svg.addEventListener('pointerleave', () => { g.setAttribute('visibility', 'hidden'); tip.hidden = true; });
+  }
 }
 
 function renderSniper() {
@@ -230,17 +348,22 @@ function render() {
     pending = false;
     renderStats(); renderPipeline();
     Object.keys(bots).forEach(renderBotHead);
+    renderMiniSniper(); renderMiniSecurity(); renderMiniReal(); renderMiniPaper(); renderRecentTrades();
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
+    renderEquity();
   });
 }
 
 // ---------- log ----------
-const logEl = $('#log');
 on('log', ({ bot, msg, level, ts }) => {
-  const div = document.createElement('div');
-  div.innerHTML = `<span class="t">${new Date(ts).toLocaleTimeString('nl-NL')}</span><span class="b">[${esc(bot)}]</span><span class="${level}">${esc(msg)}</span>`;
-  logEl.prepend(div);
-  while (logEl.childElementCount > 400) logEl.lastChild.remove();
+  const html = `<span class="t">${new Date(ts).toLocaleTimeString('nl-NL')}</span><span class="b">[${esc(bot)}]</span><span class="${level}">${esc(msg)}</span>`;
+  for (const el of $$('[data-log]')) {
+    if (el.dataset.log && el.dataset.log !== bot) continue;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    el.prepend(div);
+    while (el.childElementCount > 300) el.lastChild.remove();
+  }
   render();
 });
 
@@ -271,11 +394,13 @@ function showDetail(mint) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log]');
   if (!el) return;
-  const card = el.closest('[data-bot]');
-  if (el.hasAttribute('data-toggle')) {
-    const b = bots[card.dataset.bot];
+  const card = el.closest('[data-bot],[data-mini]');
+  if (el.hasAttribute('data-clear-log')) {
+    $('[data-log]', el.closest('.card')).innerHTML = '';
+  } else if (el.hasAttribute('data-toggle')) {
+    const b = bots[card.dataset.bot || card.dataset.mini];
     b.running ? b.stop() : b.start();
     persistRunning();
   } else if (el.hasAttribute('data-once')) {
@@ -296,16 +421,17 @@ document.addEventListener('click', async (e) => {
   }
 });
 
-$('#manualForm').addEventListener('submit', async (e) => {
+$$('form.manual').forEach((form) => form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const mint = $('#manualMint').value.trim();
+  const input = form.elements.mint;
+  const mint = input.value.trim();
   if (!mint) return;
   try {
     await security.addManual(mint);
-    $('#manualMint').value = '';
+    input.value = '';
     if (!security.running) log('security', 'Tip: start de Security bot om de wachtrij te verwerken', 'warn');
   } catch (err) { log('security', err.message, 'err'); }
-});
+}));
 
 const RUN_KEY = 'solbot.running.v1';
 function persistRunning() {
@@ -314,7 +440,6 @@ function persistRunning() {
 $('#startAll').onclick = () => { Object.values(bots).forEach((b) => b.start()); persistRunning(); };
 $('#stopAll').onclick = () => { Object.values(bots).forEach((b) => b.running && b.stop()); persistRunning(); };
 $('#resetPaper').onclick = () => { if (confirm('Paper account resetten? Alle posities en historie worden gewist.')) trader.reset(); };
-$('#clearLog').onclick = () => { logEl.innerHTML = ''; };
 $('#resetSettings').onclick = () => {
   if (!confirm('Alle instellingen terugzetten naar standaard?')) return;
   resetSettings(); buildForms(); log('app', 'Instellingen hersteld', 'warn');
@@ -324,9 +449,26 @@ on('bot', render);
 on('sniper:results', render);
 on('security:done', render);
 
+// ---------- router: one page app, so the bots keep running across pages ----------
+const ROUTES = { dashboard: 'Dashboard', sniper: 'Sniper', security: 'Security check', real: 'Real check', paper: 'Paper trader' };
+function route() {
+  const r = (location.hash.match(/^#\/(\w+)/) || [])[1];
+  const page = ROUTES[r] ? r : 'dashboard';
+  $$('[data-page]').forEach((s) => { s.hidden = s.dataset.page !== page; });
+  $$('[data-route]').forEach((a) => {
+    a.classList.toggle('active', a.dataset.route === page);
+    if (a.dataset.route === page) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  document.title = page === 'dashboard' ? 'SolBot' : `SolBot · ${ROUTES[page]}`;
+  window.scrollTo(0, 0);
+  render();
+}
+window.addEventListener('hashchange', route);
+window.addEventListener('resize', () => render());
+
 // ---------- boot ----------
 buildForms();
-render();
+route();
 setInterval(render, 3000);
 log('app', 'SolBot geladen — PAPER MODE (geen echt geld).', 'ok');
 try {

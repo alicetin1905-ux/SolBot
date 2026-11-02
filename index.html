@@ -24,23 +24,88 @@
     </div>
   </header>
 
+  <nav class="tabs" id="nav">
+    <a href="#/dashboard" data-route="dashboard">📊 Dashboard</a>
+    <a href="#/sniper" data-route="sniper"><span class="dot" data-dot="sniper"></span>1 · Sniper <span class="cnt" data-cnt="sniper"></span></a>
+    <a href="#/security" data-route="security"><span class="dot" data-dot="security"></span>2 · Security <span class="cnt" data-cnt="security"></span></a>
+    <a href="#/real" data-route="real"><span class="dot" data-dot="real"></span>3 · Real check <span class="cnt" data-cnt="real"></span></a>
+    <a href="#/paper" data-route="paper"><span class="dot" data-dot="paper"></span>4 · Paper trader <span class="cnt" data-cnt="paper"></span></a>
+  </nav>
+
   <main>
-    <section class="stats" id="stats"></section>
+    <!-- ================= DASHBOARD ================= -->
+    <section class="page" data-page="dashboard">
+      <div class="stats"></div>
+      <div class="pipeline" id="pipeline"></div>
+      <form class="manual"><input name="mint" placeholder="Plak een token adres (mint) om direct te checken…" autocomplete="off" spellcheck="false"><button class="btn">Check token</button></form>
 
-    <section class="pipeline" id="pipeline"></section>
+      <div class="grid">
+        <article class="card mini" data-mini="sniper">
+          <header class="card-head">
+            <span class="num">1</span>
+            <div class="title"><h2>Sniper bot</h2><p>Beste nieuwe coins</p></div>
+            <span class="status" data-status></span>
+            <button class="btn primary small" data-toggle>Start</button>
+          </header>
+          <div class="body" data-mini-body></div>
+          <a class="more" href="#/sniper">Open Sniper pagina →</a>
+        </article>
+        <article class="card mini" data-mini="security">
+          <header class="card-head">
+            <span class="num">2</span>
+            <div class="title"><h2>Security check</h2><p>Honeypot, rugpull, mintable</p></div>
+            <span class="status" data-status></span>
+            <button class="btn primary small" data-toggle>Start</button>
+          </header>
+          <div class="body" data-mini-body></div>
+          <a class="more" href="#/security">Open Security pagina →</a>
+        </article>
+        <article class="card mini" data-mini="real">
+          <header class="card-head">
+            <span class="num">3</span>
+            <div class="title"><h2>Real check</h2><p>Bevestigt de gekozen coins</p></div>
+            <span class="status" data-status></span>
+            <button class="btn primary small" data-toggle>Start</button>
+          </header>
+          <div class="body" data-mini-body></div>
+          <a class="more" href="#/real">Open Real check pagina →</a>
+        </article>
+        <article class="card mini" data-mini="paper">
+          <header class="card-head">
+            <span class="num">4</span>
+            <div class="title"><h2>Paper trader</h2><p>Nep-SOL, echte quotes</p></div>
+            <span class="status" data-status></span>
+            <button class="btn primary small" data-toggle>Start</button>
+          </header>
+          <div class="body" data-mini-body></div>
+          <a class="more" href="#/paper">Open Paper trader pagina →</a>
+        </article>
+      </div>
 
-    <section class="manual">
-      <form id="manualForm">
-        <input id="manualMint" placeholder="Plak een token adres (mint) om direct te checken…" autocomplete="off" spellcheck="false">
-        <button class="btn">Check token</button>
-      </form>
+      <div class="grid">
+        <article class="card">
+          <header class="card-head"><div class="title"><h2>Equity verloop</h2><p>Paper saldo + open posities, in SOL</p></div></header>
+          <div class="body"><div class="equity-chart"></div></div>
+        </article>
+        <article class="card">
+          <header class="card-head"><div class="title"><h2>Laatste trades</h2></div></header>
+          <div class="body" data-recent-trades></div>
+          <a class="more" href="#/paper">Alle trades →</a>
+        </article>
+      </div>
+
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Live log</h2><p>Alle bots</p></div><button class="btn ghost small" data-clear-log>Wissen</button></header>
+        <div class="log" data-log=""></div>
+      </article>
     </section>
 
-    <section class="grid">
+    <!-- ================= 1. SNIPER ================= -->
+    <section class="page" data-page="sniper" hidden>
       <article class="card" data-bot="sniper">
         <header class="card-head">
           <span class="num">1</span>
-          <div class="title"><h2>Sniper bot</h2><p>Scant Solana voor de beste nieuwe coins</p></div>
+          <div class="title"><h2>Sniper bot</h2><p>Scant DexScreener (nieuwe profielen, boosts) en GeckoTerminal (nieuwe pools) en scoort elke Solana coin op liquiditeit, volume, koopdruk, momentum, leeftijd en socials.</p></div>
           <span class="status" data-status></span>
         </header>
         <div class="controls">
@@ -51,11 +116,19 @@
         <form class="settings" data-form hidden></form>
         <div class="body" data-body></div>
       </article>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Sniper log</h2></div><button class="btn ghost small" data-clear-log>Wissen</button></header>
+        <div class="log" data-log="sniper"></div>
+      </article>
+    </section>
 
+    <!-- ================= 2. SECURITY ================= -->
+    <section class="page" data-page="security" hidden>
+      <form class="manual"><input name="mint" placeholder="Plak een token adres (mint) om direct te checken…" autocomplete="off" spellcheck="false"><button class="btn">Check token</button></form>
       <article class="card" data-bot="security">
         <header class="card-head">
           <span class="num">2</span>
-          <div class="title"><h2>Security check</h2><p>Honeypot, rugpull, mintable, freeze, LP, holders</p></div>
+          <div class="title"><h2>Security check</h2><p>Mint &amp; freeze authority, rugged, Token-2022 extensies, transfer tax, LP locked/burned, top holders, insider netwerk, RugCheck risico's en een honeypot test (koop + verkoop simulatie via Jupiter).</p></div>
           <span class="status" data-status></span>
         </header>
         <div class="controls">
@@ -65,11 +138,18 @@
         <form class="settings" data-form hidden></form>
         <div class="body" data-body></div>
       </article>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Security log</h2></div><button class="btn ghost small" data-clear-log>Wissen</button></header>
+        <div class="log" data-log="security"></div>
+      </article>
+    </section>
 
+    <!-- ================= 3. REAL CHECK ================= -->
+    <section class="page" data-page="real" hidden>
       <article class="card" data-bot="real">
         <header class="card-head">
           <span class="num">3</span>
-          <div class="title"><h2>Real check</h2><p>Bevestigt of de gekozen coins écht goed zijn</p></div>
+          <div class="title"><h2>Real check</h2><p>Observeert veilige coins meerdere rondes: blijft de liquiditeit, houdt de prijs stand, blijven kopers komen, klopt DexScreener met Jupiter en is de coin nog verkoopbaar?</p></div>
           <span class="status" data-status></span>
         </header>
         <div class="controls">
@@ -79,11 +159,19 @@
         <form class="settings" data-form hidden></form>
         <div class="body" data-body></div>
       </article>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Real check log</h2></div><button class="btn ghost small" data-clear-log>Wissen</button></header>
+        <div class="log" data-log="real"></div>
+      </article>
+    </section>
 
+    <!-- ================= 4. PAPER ================= -->
+    <section class="page" data-page="paper" hidden>
+      <div class="stats"></div>
       <article class="card" data-bot="paper">
         <header class="card-head">
           <span class="num">4</span>
-          <div class="title"><h2>Paper trader</h2><p>Handelt met nep-SOL op echte Jupiter quotes</p></div>
+          <div class="title"><h2>Paper trader</h2><p>Koopt bevestigde coins met nep-SOL op echte Jupiter quotes. Take profit, stop loss, trailing stop, max houdtijd en rug-alarm.</p></div>
           <span class="status" data-status></span>
         </header>
         <div class="controls">
@@ -94,19 +182,18 @@
         <form class="settings" data-form hidden></form>
         <div class="body" data-body></div>
       </article>
-    </section>
-
-    <section class="card wide">
-      <header class="card-head"><div class="title"><h2>Trade historie</h2></div></header>
-      <div class="body" id="history"></div>
-    </section>
-
-    <section class="card wide">
-      <header class="card-head">
-        <div class="title"><h2>Live log</h2></div>
-        <button class="btn ghost small" id="clearLog">Wissen</button>
-      </header>
-      <div class="log" id="log"></div>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Equity verloop</h2><p>Paper saldo + open posities, in SOL</p></div></header>
+        <div class="body"><div class="equity-chart"></div></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Trade historie</h2></div></header>
+        <div class="body" id="history"></div>
+      </article>
+      <article class="card">
+        <header class="card-head"><div class="title"><h2>Paper log</h2></div><button class="btn ghost small" data-clear-log>Wissen</button></header>
+        <div class="log" data-log="paper"></div>
+      </article>
     </section>
 
     <p class="disclaimer">

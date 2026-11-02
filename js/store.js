@@ -49,6 +49,7 @@ export function freshPaper() {
   return {
     balance: settings.paper.startSol, startSol: settings.paper.startSol,
     positions: [], history: [], solUsd: 0,
+    equityHist: [{ t: Date.now(), v: settings.paper.startSol }],
   };
 }
 export const paper = Object.assign(freshPaper(), load(KEY_PAPER, {}));

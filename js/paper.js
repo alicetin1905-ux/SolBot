@@ -53,6 +53,7 @@ export class PaperBot extends Bot {
     paper.positions.push(pos);
     this.signals = this.signals.filter((x) => x.mint !== t.mint);
     upsertToken(t.mint, { stage: 'traded' });
+    this.recordEquity(true);
     savePaper();
     log(this.id, `🟢 PAPER BUY ${t.symbol}: ${s.sizeSol} SOL → ${fmtNum(ui)} tokens (impact ${pos.priceImpact.toFixed(2)}%)`, 'ok');
     this.changed();
@@ -79,15 +80,27 @@ export class PaperBot extends Bot {
     };
     paper.history.unshift(trade);
     paper.history = paper.history.slice(0, 300);
+    this.recordEquity(true);
     savePaper();
     log(this.id, `${pnlSol >= 0 ? '💰' : '🔻'} PAPER SELL ${pos.symbol}: ${reason} · ${pnlSol >= 0 ? '+' : ''}${pnlSol.toFixed(4)} SOL (${trade.pnlPct.toFixed(1)}%)`, pnlSol >= 0 ? 'ok' : 'err');
     this.changed();
   }
 
+  /** Stores an equity point for the chart (at most one per 30s unless forced). */
+  recordEquity(force = false) {
+    const h = paper.equityHist;
+    const v = this.stats().equity;
+    const last = h[h.length - 1];
+    if (!force && last && Date.now() - last.t < 30000 && Math.abs(last.v - v) < 1e-6) return;
+    if (!force && last && Date.now() - last.t < 30000) { last.v = v; return; }
+    h.push({ t: Date.now(), v });
+    if (h.length > 1500) h.splice(0, h.length - 1500);
+  }
+
   async tick() {
     const s = settings.paper;
     await this.refreshSolPrice().catch(() => {});
-    if (!paper.positions.length) return;
+    if (!paper.positions.length) { this.recordEquity(); savePaper(); return; }
     const pairs = api.bestPairs(await api.dsPairsForTokens(paper.positions.map((p) => p.mint)));
 
     for (const pos of [...paper.positions]) {
@@ -109,6 +122,7 @@ export class PaperBot extends Bot {
       else if (pos.entryLiq && pos.liq && pos.liq < pos.entryLiq * 0.5) reason = 'Liquiditeit -50% (rug alarm)';
       if (reason) await this.sell(pos, reason);
     }
+    this.recordEquity();
     savePaper();
     this.changed();
   }

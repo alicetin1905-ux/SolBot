@@ -10,6 +10,17 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 | 3 | **Real check** | Observeert goedgekeurde coins meerdere rondes: blijft de liquiditeit staan, gaat de prijs niet onderuit, blijven kopers komen, klopt de DexScreener prijs met Jupiter, en is de coin nog steeds verkoopbaar. Geeft een totaalscore. |
 | 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL, op basis van echte Jupiter quotes (inclusief price impact en tax). Take profit, stop loss, trailing stop, max houdtijd en rug-alarm (liquiditeit -50%). |
 
+## Pagina's
+| Pagina | Link | Inhoud |
+|--------|------|--------|
+| 📊 Dashboard | `#/dashboard` | Alle 4 bots samen: statistieken, pipeline, mini-kaart per bot (start/stop + top 5), equity grafiek, laatste trades en live log |
+| 1 · Sniper | `#/sniper` | Volledige scan-tabel, instellingen en sniper log |
+| 2 · Security | `#/security` | Wachtrij, alle checks per token, handmatig token checken, security log |
+| 3 · Real check | `#/real` | Coins in observatie, resultaten met scores, real check log |
+| 4 · Paper trader | `#/paper` | Saldo, open posities, signalen, equity grafiek, trade historie, paper log |
+
+Alles is één app: de bots blijven draaien als je van pagina wisselt.
+
 ## Gebruik
 1. Open de site en klik **Start alle bots** (of start ze één voor één).
 2. Laat het tabblad open: de bots draaien in je browser.
