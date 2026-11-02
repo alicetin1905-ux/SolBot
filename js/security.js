@@ -1,10 +1,11 @@
-import { Bot } from './bot.js?v=20261102182905';
-import * as api from './api.js?v=20261102182905';
-import { settings, upsertToken, tokens, emit, log } from './store.js?v=20261102182905';
+import { Bot } from './bot.js?v=20261102235128';
+import * as api from './api.js?v=20261102235128';
+import { settings, upsertToken, tokens, emit, log } from './store.js?v=20261102235128';
 
 const LAMPORTS = 1e9;
 
 class RetryLater extends Error {}
+const MAX_PARALLEL = 3;
 
 export class SecurityBot extends Bot {
   constructor() {
@@ -12,19 +13,41 @@ export class SecurityBot extends Bot {
     this.queue = [];
     this.checked = []; // most recent first
     this.stats = { pass: 0, fail: 0 };
+    this.active = 0;
   }
 
-  intervalMs() { return 2000; }
+  intervalMs() { return 1000; }
 
   enqueue(t) {
     if (this.queue.some((x) => x.mint === t.mint)) return;
+    t.queuedAt = t.queuedAt || Date.now();
     this.queue.push(t);
     this.changed();
   }
 
+  /**
+   * Runs up to MAX_PARALLEL audits at once (the API rate limiters still space the calls),
+   * best sniper score first; candidates waiting longer than 15 min are dropped as stale.
+   */
   async tick() {
-    const t = this.queue.shift();
-    if (!t) return;
+    const now = Date.now();
+    for (const t of this.queue.filter((x) => !x.attempts && now - x.queuedAt > 15 * 60000)) {
+      this.queue = this.queue.filter((x) => x !== t);
+      upsertToken(t.mint, { stage: 'rejected', rejectReason: 'te lang in wachtrij' });
+      log(this.id, `⌛ ${t.symbol} overgeslagen: >15 min in de wachtrij`, 'warn');
+    }
+    const prio = (x) => (x.manual ? 1000 : x.sniperScore || 0); // manual checks go first
+    this.queue.sort((a, b) => prio(b) - prio(a));
+    while (this.active < MAX_PARALLEL && this.queue.length) {
+      const t = this.queue.shift();
+      this.active++;
+      this.process(t)
+        .catch((e) => log(this.id, `Fout bij ${t.symbol || t.mint.slice(0, 6)}: ${e.message}`, 'err'))
+        .finally(() => { this.active--; this.changed(); });
+    }
+  }
+
+  async process(t) {
     upsertToken(t.mint, { stage: 'security' });
     this.changed();
     log(this.id, `🔍 Check ${t.symbol || t.mint.slice(0, 6)}…`);
@@ -149,7 +172,8 @@ export class SecurityBot extends Bot {
       add('RugCheck risico-score', rs > s.maxRiskScore ? 'fail' : 'pass', `${rs} (lager = beter)`);
 
       for (const risk of r.risks || []) {
-        if (risk.level === 'danger') add(`Risico: ${risk.name}`, 'fail', risk.description || risk.value || '');
+        // strictDanger off: RugCheck "danger" risks only warn; the hard checks above still fail.
+        if (risk.level === 'danger') add(`Risico: ${risk.name}`, s.strictDanger ? 'fail' : 'warn', risk.description || risk.value || '');
         else if (risk.level === 'warn') add(`Risico: ${risk.name}`, 'warn', risk.description || risk.value || '');
       }
     }
@@ -219,7 +243,7 @@ export class SecurityBot extends Bot {
         if (p) upsertToken(mint, { pair: p, symbol: p.baseToken.symbol, name: p.baseToken.name });
       } catch { /* pair info optional */ }
     }
-    upsertToken(mint, { stage: 'security-queue' });
+    upsertToken(mint, { stage: 'security-queue', manual: true });
     this.enqueue(tokens.get(mint));
     log(this.id, `Handmatig toegevoegd: ${tokens.get(mint).symbol || mint}`);
   }

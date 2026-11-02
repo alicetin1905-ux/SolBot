@@ -73,6 +73,7 @@ async function getOnce(url, timeout) {
 export const dsLatestProfiles = () => limits.dsMeta(() => getJSON(`${DS}/token-profiles/latest/v1`));
 export const dsLatestBoosts = () => limits.dsMeta(() => getJSON(`${DS}/token-boosts/latest/v1`));
 export const dsTopBoosts = () => limits.dsMeta(() => getJSON(`${DS}/token-boosts/top/v1`));
+export const dsTakeovers = () => limits.dsMeta(() => getJSON(`${DS}/community-takeovers/latest/v1`));
 
 /** Returns all pairs for the given token mints (batched by 30). */
 export async function dsPairsForTokens(mints) {
@@ -98,9 +99,12 @@ export function bestPairs(pairs) {
   return map;
 }
 
-// ---------- GeckoTerminal (new pools; optional, often rate-limited) ----------
-export async function geckoNewPools() {
-  const res = await limits.gecko(() => getJSON(`${GECKO}/networks/solana/new_pools?page=1`));
+// ---------- GeckoTerminal (new + trending pools on every Solana DEX; optional) ----------
+export const geckoNewPools = (page = 1) => geckoPools(`new_pools?page=${page}`);
+export const geckoTrending = () => geckoPools('trending_pools?page=1');
+
+async function geckoPools(path) {
+  const res = await limits.gecko(() => getJSON(`${GECKO}/networks/solana/${path}`));
   const mints = [];
   for (const pool of res?.data || []) {
     const id = pool?.relationships?.base_token?.data?.id || '';

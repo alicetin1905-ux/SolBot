@@ -1,9 +1,9 @@
 // Outcome tracker: follows every coin the sniper looked at (also the rejected
 // ones) and stores what its price did after 5m … 6h. This tells you whether the
 // filters keep the winners and block the rugs.
-import { Bot } from './bot.js?v=20261102182905';
-import * as api from './api.js?v=20261102182905';
-import { on } from './store.js?v=20261102182905';
+import { Bot } from './bot.js?v=20261102235128';
+import * as api from './api.js?v=20261102235128';
+import { on, currentProfile } from './store.js?v=20261102235128';
 
 export const CHECKPOINTS = [5, 15, 30, 60, 120, 240, 360]; // minutes
 export const WIN_PCT = 50;   // "winner" = ever >= +50% after first seen
@@ -53,6 +53,7 @@ export class TrackerBot extends Bot {
       mint: r.mint, sym: r.symbol, dex: r.dex, origin: r.origin || 'lijst', t0: Date.now(),
       p0: r.price, liq0: r.liq, mc0: r.mcap, score: r.score,
       stage: r.pass ? 'pending' : 'filtered', reason: r.pass ? null : r.reason,
+      profile: currentProfile() || 'aangepast',
       cp: {}, max: 0, min: 0, rug: false, done: false,
     };
     this.dirty = true;

@@ -1,11 +1,11 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log } from './store.js?v=20261102182905';
-import { SniperBot, fmt } from './sniper.js?v=20261102182905';
-import { SecurityBot } from './security.js?v=20261102182905';
-import { RealCheckBot } from './realcheck.js?v=20261102182905';
-import { PaperBot } from './paper.js?v=20261102182905';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261102182905';
-import { TrackerBot } from './metingen.js?v=20261102182905';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261102182905';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261102235128';
+import { SniperBot, fmt } from './sniper.js?v=20261102235128';
+import { SecurityBot } from './security.js?v=20261102235128';
+import { RealCheckBot } from './realcheck.js?v=20261102235128';
+import { PaperBot } from './paper.js?v=20261102235128';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261102235128';
+import { TrackerBot } from './metingen.js?v=20261102235128';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261102235128';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -49,6 +49,7 @@ const SCHEMA = {
     ['useMigrations', 'Live: migraties naar PumpSwap', 'bool'],
     ['launchMinAgeMin', 'Launch: eerst checken na (min)'], ['launchMaxAgeMin', 'Launch: volgen tot (min)'],
     ['curveMinMcap', 'Bonding curve: min. mcap ($)'],
+    ['youngMinScore', 'Min. score jonge coins (launch/curve/<1u)'],
   ],
   security: [
     ['maxTop10', 'Max. top 10 holders (%)'], ['maxSingleHolder', 'Max. grootste holder (%)'],
@@ -57,6 +58,7 @@ const SCHEMA = {
     ['testSol', 'Honeypot test bedrag (SOL)'], ['maxTransferFee', 'Max. transfer tax (%)'],
     ['maxInsiders', 'Max. insider wallets'],
     ['minOrganic', 'Min. organic score (Jupiter, 0-100)'],
+    ['strictDanger', 'RugCheck "danger" risico = afkeuren', 'bool'],
   ],
   real: [
     ['rounds', 'Observatie rondes'], ['intervalSec', 'Tijd tussen rondes (sec)'],
@@ -115,6 +117,13 @@ function miniSpark(vals, w = 120, h = 28) {
   const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || Math.abs(hi) * 0.01 || 1;
   const d = vals.map((v, i) => `${i ? 'L' : 'M'}${((i / (vals.length - 1)) * w).toFixed(1)},${(h - 2 - ((v - lo) / span) * (h - 4)).toFixed(1)}`).join('');
   return `<svg class="mspark ${vals[vals.length - 1] >= vals[0] ? 'up' : 'down'}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${d}"/></svg>`;
+}
+
+function renderProfiles() {
+  const cur = currentProfile();
+  $('#profiles').innerHTML = Object.entries(PROFILES).map(([k, p]) =>
+    `<button class="pchip ${cur === k ? 'on' : ''}" data-profile="${k}" title="${esc(p.desc)}">${p.label}</button>`).join('')
+    + (cur ? '' : '<span class="pchip custom" title="Je hebt instellingen handmatig aangepast">✏️ Aangepast</span>');
 }
 
 function renderKpis() {
@@ -351,7 +360,9 @@ function renderSniper() {
     `<button class="fchip ${sniperFilter === k ? 'on' : ''}" data-filter="${k}">${l} <span>${sniper.results.filter(f).length}</span></button>`).join('');
   const f = (SNIPER_FILTERS.find((x) => x[0] === sniperFilter) || SNIPER_FILTERS[0])[2];
   const rows = sniper.results.filter(f).slice(0, 50);
-  $('[data-bot="sniper"] [data-body]').innerHTML = rows.length ? `
+  const srcs = Object.entries(sniper.sources);
+  const srcLine = `<div class="srcline"><span class="mint">Bronnen laatste scan:</span> ${chip(`🆕 PumpPortal live <b>${sniper.live.creates}</b>`, 'launch')}${chip(`🎓 migraties <b>${sniper.live.migrations}</b>`, 'migratie')}${srcs.map(([k, n]) => chip(`${esc(k)} <b>${n}</b>`)).join('')}</div>`;
+  $('[data-bot="sniper"] [data-body]').innerHTML = srcLine + (rows.length ? `
     <table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Score</th><th class="r" title="Bij bonding curve: ~20% van market cap">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th><th>Status</th></tr></thead>
     <tbody>${rows.map((r) => `
       <tr class="click ${r.pass ? '' : 'dim'}" data-mint="${esc(r.mint)}">
@@ -363,7 +374,7 @@ function renderSniper() {
         <td class="r">${r.ageH < 999 ? ago(r.ageH * 3.6e6) : '?'}</td>
         <td>${r.pass ? chip('✓ kandidaat', 'good') : `<span class="reason" title="${esc(r.reason)}">${esc(r.reason)}</span>`}</td>
       </tr>`).join('')}</tbody></table>`
-    : `<div class="empty big">${sniper.busy ? '⏳ Scannen…' : sniper.results.length ? 'Geen coins in dit filter.' : '🎯 Nog geen scan. Klik op Start of Nu scannen.'}</div>`;
+    : `<div class="empty big">${sniper.busy ? '⏳ Scannen…' : sniper.results.length ? 'Geen coins in dit filter.' : '🎯 Nog geen scan. Klik op Start of Nu scannen.'}</div>`);
 }
 
 function renderSecurity() {
@@ -452,7 +463,7 @@ function render() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderKpis(); renderFlow();
+    renderKpis(); renderFlow(); renderProfiles();
     Object.keys(bots).forEach(renderBotHead);
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
@@ -510,7 +521,7 @@ function showDetail(mint) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile]');
   if (!el) return;
   const card = el.closest('[data-bot],[data-mini]');
   if (el.hasAttribute('data-clear-log')) {
@@ -534,6 +545,12 @@ document.addEventListener('click', async (e) => {
     security.addManual(el.dataset.check).catch((err) => log('security', err.message, 'err'));
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
+  } else if (el.dataset.profile) {
+    applyProfile(el.dataset.profile);
+    buildForms();
+    log('app', `Profiel ${PROFILES[el.dataset.profile].label} actief`, 'ok');
+    for (const b of ['sniper', 'security', 'real', 'paper']) log(b, `Profiel ${PROFILES[el.dataset.profile].label} toegepast`, 'ok');
+    render();
   } else if (el.dataset.filter) {
     sniperFilter = el.dataset.filter;
     render();

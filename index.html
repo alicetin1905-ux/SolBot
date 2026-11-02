@@ -6,7 +6,7 @@
   <title>SolBot</title>
   <meta name="description" content="4 Solana bots: sniper, security check, real check en paper trading.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
-  <link rel="stylesheet" href="css/style.css?v=20261102182905">
+  <link rel="stylesheet" href="css/style.css?v=20261102235128">
 </head>
 <body>
   <header class="top">
@@ -18,6 +18,7 @@
       </div>
       <span class="badge paper">PAPER MODE</span>
     </div>
+    <div class="profiles" id="profiles" role="group" aria-label="Profiel"></div>
     <div class="top-actions">
       <button id="startAll" class="btn primary">▶ Start alle bots</button>
       <button id="stopAll" class="btn">■ Stop alle</button>
@@ -190,7 +191,7 @@
   </div>
   <script>
     // Shows a visible message (instead of an empty page) when the app modules fail to load.
-    window.SOLBOT_VERSION = '20261102182905';
+    window.SOLBOT_VERSION = '20261102235128';
     (function () {
       var shown = false;
       function show(msg) {

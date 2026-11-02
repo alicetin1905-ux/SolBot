@@ -1,6 +1,6 @@
-import { Bot } from './bot.js?v=20261102182905';
-import * as api from './api.js?v=20261102182905';
-import { settings, tokens, upsertToken, emit, log } from './store.js?v=20261102182905';
+import { Bot } from './bot.js?v=20261102235128';
+import * as api from './api.js?v=20261102235128';
+import { settings, tokens, upsertToken, emit, log } from './store.js?v=20261102235128';
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const PUMPPORTAL_WS = 'wss://pumpportal.fun/api/data';
@@ -39,11 +39,14 @@ export function scorePair(p, s) {
 }
 
 function filterReason(m, s) {
+  // Bonding-curve coins have their own (lower) market-cap floor instead of the liquidity + mcap floors.
   if (m.curve) {
     if (m.mcap < s.curveMinMcap) return `bonding curve mcap < $${s.curveMinMcap}`;
-  } else if (m.liq < s.minLiq) return `liquiditeit < $${s.minLiq}`;
+  } else {
+    if (m.liq < s.minLiq) return `liquiditeit < $${s.minLiq}`;
+    if (m.mcap < s.minMcap) return 'mcap te laag';
+  }
   if (m.volH1 < s.minVolH1) return `volume 1u < $${s.minVolH1}`;
-  if (m.mcap < s.minMcap) return 'mcap te laag';
   if (m.mcap > s.maxMcap) return 'mcap te hoog';
   if (m.ageH > s.maxAgeH) return `ouder dan ${s.maxAgeH}u`;
   if (m.bs < s.minBuySell) return 'meer sells dan buys';
@@ -67,6 +70,7 @@ export class SniperBot extends Bot {
     this.ws = null;
     this.wsRetry = 0;
     this.live = { status: 'uit', creates: 0, migrations: 0, lastMsg: 0 };
+    this.sources = {}; // coins per list source in the last scan
   }
 
   intervalMs() { return 10000; }
@@ -150,23 +154,32 @@ export class SniperBot extends Bot {
   // ---------- list sources ----------
   async collectMints() {
     const s = settings.sniper;
-    const sources = [
-      ['profiles', api.dsLatestProfiles()],
-      ['boosts', api.dsLatestBoosts()],
-      ['top boosts', api.dsTopBoosts()],
-    ];
     const mints = new Set();
-    const results = await Promise.allSettled(sources.map((x) => x[1]));
+    const count = (name, list) => {
+      this.sources[name] = list.length;
+      list.forEach((m) => mints.add(m));
+    };
+    const ds = [
+      ['DexScreener profielen', api.dsLatestProfiles()],
+      ['DexScreener boosts', api.dsLatestBoosts()],
+      ['DexScreener top boosts', api.dsTopBoosts()],
+      ['Community takeovers', api.dsTakeovers()],
+    ];
+    const results = await Promise.allSettled(ds.map((x) => x[1]));
     results.forEach((r, i) => {
       if (r.status === 'fulfilled' && Array.isArray(r.value)) {
-        r.value.filter((x) => x.chainId === 'solana').forEach((x) => mints.add(x.tokenAddress));
+        count(ds[i][0], r.value.filter((x) => x.chainId === 'solana').map((x) => x.tokenAddress));
       } else if (r.status === 'rejected') {
-        log(this.id, `Bron ${sources[i][0]} faalde: ${r.reason?.message}`, 'warn');
+        log(this.id, `Bron ${ds[i][0]} faalde: ${r.reason?.message}`, 'warn');
       }
     });
     if (s.useGecko) {
-      try { (await api.geckoNewPools()).forEach((m) => mints.add(m)); }
-      catch (e) { log(this.id, `GeckoTerminal overgeslagen (${e.message})`, 'warn'); }
+      // GeckoTerminal covers every DEX/launchpad (Raydium LaunchLab, Meteora, Orca…), not only Pump.fun.
+      const gecko = [['Gecko nieuwe pools', () => api.geckoNewPools(1)], ['Gecko nieuwe pools p2', () => api.geckoNewPools(2)], ['Gecko trending', () => api.geckoTrending()]];
+      for (const [name, fn] of gecko) {
+        try { count(name, await fn()); }
+        catch (e) { log(this.id, `${name} overgeslagen (${e.message})`, 'warn'); }
+      }
     }
     mints.delete(api.SOL_MINT);
     return [...mints];
@@ -202,10 +215,14 @@ export class SniperBot extends Bot {
     for (const [mint, p] of pairs) {
       const m = scorePair(p, s);
       let reason = filterReason(m, s);
-      if (!reason && m.score < s.minScore) reason = `score ${m.score} < ${s.minScore}`;
       // Keep the first real source: a launch that later shows up in a list is still a launch.
       const prevSrc = this.resultMap.get(mint)?.origin || tokens.get(mint)?.origin;
       const src = prevSrc && prevSrc !== 'lijst' ? prevSrc : (origin.get(mint) || 'lijst');
+      // Young coins (fresh launches, migrations, bonding curves) get their own score floor:
+      // the score rewards liquidity and history, which a coin of minutes old cannot have yet.
+      const young = m.curve || src !== 'lijst' || m.ageH < 1;
+      const floor = young ? s.youngMinScore : s.minScore;
+      if (!reason && m.score < floor) reason = `score ${m.score} < ${floor}${young ? ' (jong)' : ''}`;
       const r = {
         mint, symbol: p.baseToken.symbol, name: p.baseToken.name, ...m, url: p.url, dex: p.dexId,
         origin: src, pass: !reason, reason, seenAt: now,

@@ -574,3 +574,13 @@ dialog .insight { margin-top: 12px; }
 .boot-error[hidden] { display: none; }
 .boot-error span { color: var(--muted); }
 .boot-error .btn { justify-self: start; margin-top: 4px; }
+
+/* profile switch */
+.profiles { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.pchip { border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-radius: 9px; cursor: pointer; font-weight: 600; font-size: 13px; white-space: nowrap; }
+.pchip:hover { color: var(--text); }
+.pchip.on { background: var(--accent); color: #fff; }
+.pchip.custom { cursor: default; color: var(--warn); }
+.srcline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
+.srcline .chip b { margin-left: 2px; }
+@media (max-width: 700px) { .profiles { order: 3; width: 100%; } .pchip { flex: 1; padding: 6px 4px; font-size: 12px; } }

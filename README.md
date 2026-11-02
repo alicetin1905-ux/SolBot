@@ -5,10 +5,15 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 
 | # | Bot | Wat hij doet |
 |---|-----|--------------|
-| 1 | **Sniper** | Live feed via PumpPortal: elke nieuwe Pump.fun launch en elke migratie naar PumpSwap, direct bij creatie. Daarnaast DexScreener (profielen, boosts) en GeckoTerminal nieuwe pools. Scoort elke coin op liquiditeit, volume/liquiditeit, buy/sell ratio, momentum, leeftijd, transacties en socials. |
+| 1 | **Sniper** | Live feed via PumpPortal: elke nieuwe Pump.fun launch en elke migratie naar PumpSwap, direct bij creatie. Daarnaast DexScreener (profielen, boosts, community takeovers) en GeckoTerminal (nieuwe + trending pools op alle DEXen en launchpads). Scoort elke coin op liquiditeit, volume/liquiditeit, buy/sell ratio, momentum, leeftijd, transacties en socials. |
 | 2 | **Security check** | Jupiter audit (organic score tegen wash trading, verdacht-vlag; en fallback als RugCheck niet werkt) + RugCheck rapport: mint authority, freeze authority, gerugd, gevaarlijke Token-2022 extensies, transfer tax, LP locked/burned %, top 10 holders, grootste holder, insider netwerken, aantal holders, RugCheck risico's. **Honeypot test**: simuleert een koop én verkoop via Jupiter en meet het round-trip verlies. |
 | 3 | **Real check** | Observeert goedgekeurde coins meerdere rondes: blijft de liquiditeit staan, gaat de prijs niet onderuit, blijven kopers komen, klopt de DexScreener prijs met Jupiter, en is de coin nog steeds verkoopbaar. Geeft een totaalscore. |
 | 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL, op basis van echte Jupiter quotes (inclusief price impact en tax). Exits worden elke 3 sec gecheckt via Jupiter prijzen. Max. positie = 2% van de pool. Take profit, stop loss, trailing stop, max houdtijd en rug-alarm (liquiditeit -50%). |
+
+## Profielen
+Bovenaan wissel je met één klik tussen **🛡️ Voorzichtig** (strenge filters), **⚖️ Normaal** en **🔥 Agressief**
+(zoveel mogelijk coins, meer risico). Pas je zelf iets aan, dan staat er **✏️ Aangepast**. De Analyse-pagina
+vergelijkt per profiel hoeveel winnaars en rugs er doorkwamen.
 
 ## Pagina's
 | Pagina | Link | Inhoud |

@@ -5,10 +5,11 @@ export const DEFAULTS = {
     intervalSec: 60, minLiq: 10000, minVolH1: 3000, minMcap: 20000, maxMcap: 5000000,
     maxAgeH: 72, minBuySell: 1.0, minScore: 55, useGecko: true,
     useLaunches: true, useMigrations: true, launchMinAgeMin: 2, launchMaxAgeMin: 30, curveMinMcap: 12000,
+    youngMinScore: 50,
   },
   security: {
     maxTop10: 35, maxSingleHolder: 15, minLpLocked: 80, maxRiskScore: 50, minHolders: 100,
-    maxRoundTrip: 10, testSol: 0.1, maxTransferFee: 0, maxInsiders: 30, minOrganic: 15,
+    maxRoundTrip: 10, testSol: 0.1, maxTransferFee: 0, maxInsiders: 30, minOrganic: 15, strictDanger: true,
   },
   real: {
     rounds: 4, intervalSec: 45, maxLiqDrop: 15, minPriceChange: -8, maxPriceDev: 6,
@@ -20,6 +21,49 @@ export const DEFAULTS = {
     maxLiqPct: 2, minSizeSol: 0.05,
   },
 };
+
+/**
+ * One-click profiles. "Voorzichtig" equals the defaults; the others open the funnel
+ * step by step (more coins, more risk). Only the keys listed here are changed.
+ */
+export const PROFILES = {
+  voorzichtig: {
+    label: '🛡️ Voorzichtig', desc: 'Strenge filters: weinig coins, minste risico',
+    sniper: { minScore: 55, youngMinScore: 50, minLiq: 10000, minMcap: 20000, curveMinMcap: 12000, minVolH1: 3000, minBuySell: 1.0, launchMaxAgeMin: 30 },
+    security: { minOrganic: 15, maxTop10: 35, maxSingleHolder: 15, maxInsiders: 30, strictDanger: true, maxRiskScore: 50, minLpLocked: 80, maxRoundTrip: 10 },
+    real: { rounds: 4, intervalSec: 45, minScore: 60, maxLiqDrop: 15, minPriceChange: -8 },
+    paper: { sizeSol: 0.5, maxPos: 5 },
+  },
+  normaal: {
+    label: '⚖️ Normaal', desc: 'Ruimere filters voor jonge coins, sneller bevestigen',
+    sniper: { minScore: 50, youngMinScore: 42, minLiq: 7000, minMcap: 15000, curveMinMcap: 9000, minVolH1: 1500, minBuySell: 1.0, launchMaxAgeMin: 60 },
+    security: { minOrganic: 8, maxTop10: 40, maxSingleHolder: 18, maxInsiders: 40, strictDanger: false, maxRiskScore: 55, minLpLocked: 80, maxRoundTrip: 12 },
+    real: { rounds: 3, intervalSec: 30, minScore: 55, maxLiqDrop: 18, minPriceChange: -10 },
+    paper: { sizeSol: 0.3, maxPos: 8 },
+  },
+  agressief: {
+    label: '🔥 Agressief', desc: 'Zoveel mogelijk coins: veel trades, veel rugs',
+    sniper: { minScore: 42, youngMinScore: 35, minLiq: 5000, minMcap: 8000, curveMinMcap: 6000, minVolH1: 500, minBuySell: 0.9, launchMaxAgeMin: 90 },
+    security: { minOrganic: 0, maxTop10: 50, maxSingleHolder: 20, maxInsiders: 60, strictDanger: false, maxRiskScore: 70, minLpLocked: 70, maxRoundTrip: 15 },
+    real: { rounds: 2, intervalSec: 30, minScore: 45, maxLiqDrop: 25, minPriceChange: -15 },
+    paper: { sizeSol: 0.2, maxPos: 10 },
+  },
+};
+
+export function applyProfile(name) {
+  const p = PROFILES[name];
+  if (!p) return;
+  for (const bot of ['sniper', 'security', 'real', 'paper']) Object.assign(settings[bot], p[bot]);
+  saveSettings();
+}
+
+/** Name of the profile the current settings match exactly, or null ("aangepast"). */
+export function currentProfile() {
+  for (const [name, p] of Object.entries(PROFILES)) {
+    if (['sniper', 'security', 'real', 'paper'].every((bot) => Object.entries(p[bot]).every(([k, v]) => settings[bot][k] === v))) return name;
+  }
+  return null;
+}
 
 const KEY_SETTINGS = 'solbot.settings.v1';
 const KEY_PAPER = 'solbot.paper.v1';

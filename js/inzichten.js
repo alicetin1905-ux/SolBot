@@ -1,6 +1,6 @@
 // Analyse page: turns tracker records into "do my filters work?" answers.
-import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261102182905';
-import { exchangeOf } from './flow.js?v=20261102182905';
+import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261102235128';
+import { exchangeOf } from './flow.js?v=20261102235128';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const median = (a) => {
@@ -99,6 +99,12 @@ export function renderAnalyse(el, tracker) {
   const exRows = [...groupBy(recs, (r) => exchangeOf(r.dex).name).entries()].map(([k, v]) => [esc(k), agg(v)]).sort((a, b) => b[1].n - a[1].n);
   const srcLabel = { lijst: '📋 Lijsten (DexScreener/Gecko)', launch: '🆕 Live launch', migratie: '🎓 Migratie' };
   const srcRows = [...groupBy(recs, (r) => r.origin || 'lijst').entries()].map(([k, v]) => [srcLabel[k] || esc(k), agg(v)]);
+  const profLabel = { voorzichtig: '🛡️ Voorzichtig', normaal: '⚖️ Normaal', agressief: '🔥 Agressief', aangepast: '✏️ Aangepast' };
+  const passed = (r) => r.stage !== 'filtered';
+  const profRows = [...groupBy(recs, (r) => r.profile || 'aangepast').entries()].map(([k, v]) => {
+    const a = agg(v.filter(passed)); // compare what each profile let through the sniper
+    return [`${profLabel[k] || esc(k)} <span class="mint">(${v.length} gezien)</span>`, a];
+  });
   const bucket = (s) => (s >= 70 ? '70+' : s >= 55 ? '55–69' : s >= 40 ? '40–54' : '< 40');
   const scoreGroups = groupBy(recs, (r) => bucket(r.score || 0));
   const scoreRows = ['70+', '55–69', '40–54', '< 40'].filter((k) => scoreGroups.has(k)).map((k) => [`Score ${k}`, agg(scoreGroups.get(k))]);
@@ -111,6 +117,7 @@ export function renderAnalyse(el, tracker) {
       <p>Winnaar = ooit ≥ +${WIN_PCT}% na eerste keer gezien · Rug = prijs ≤ ${RUG_PCT}% of liquiditeit −80% · metingen na ${CHECKPOINTS.map((c) => (c < 60 ? `${c}m` : `${c / 60}u`)).join(', ')}</p></div></header>
       <div class="body"><div class="insights">${ins.map(([k, t]) => `<div class="insight ${k}">${k === 'ok' ? '✅' : k === 'warn' ? '⚠️' : '💡'} ${esc(t)}</div>`).join('')}</div></div></article>
     ${table('Per uitkomst in de pipeline', stageRows, 'Uitkomst', 'Doen bevestigde coins het beter dan afgekeurde?')}
+    ${table('Per profiel', profRows, 'Profiel', 'Coins die door de sniper kwamen, per actief profiel. Meer coins is pas beter als winnaar% hoog en rug% laag blijft')}
     ${table('Security afkeur-redenen', secReasons, 'Reden', 'Hoge rug% = goede check · hoge winnaar% = houdt winnaars tegen')}
     <div class="agrid">
       ${table('Sniper filter-redenen', filtReasons.slice(0, 10), 'Reden')}
