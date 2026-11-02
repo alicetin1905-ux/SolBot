@@ -30,6 +30,7 @@
     <a href="#/security" data-route="security"><span class="dot" data-dot="security"></span>2 · Security <span class="cnt" data-cnt="security"></span></a>
     <a href="#/real" data-route="real"><span class="dot" data-dot="real"></span>3 · Real check <span class="cnt" data-cnt="real"></span></a>
     <a href="#/paper" data-route="paper"><span class="dot" data-dot="paper"></span>4 · Paper trader <span class="cnt" data-cnt="paper"></span></a>
+    <a href="#/analyse" data-route="analyse">🔬 Analyse <span class="cnt" data-cnt="analyse"></span></a>
   </nav>
 
   <main>
@@ -198,6 +199,21 @@
       <article class="card">
         <header class="card-head"><div class="title"><h2>Paper log</h2></div><button class="btn ghost small" data-clear-log>Wissen</button></header>
         <div class="log" data-log="paper"></div>
+      </article>
+    </section>
+
+    <!-- ================= ANALYSE ================= -->
+    <section class="page" data-page="analyse" hidden>
+      <article class="card">
+        <header class="card-head">
+          <div class="title"><h2>Analyse: werken de filters?</h2><p>Elke coin die de sniper ziet wordt gevolgd, ook de afgekeurde. Na 5m tot 6u wordt gemeten of het een winnaar of een rug werd.</p></div>
+        </header>
+        <div class="controls">
+          <button class="btn" id="exportTracker">⬇ Metingen (CSV)</button>
+          <button class="btn" id="exportTrades">⬇ Trades (CSV)</button>
+          <button class="btn danger ghost" id="resetTracker">Metingen wissen</button>
+        </div>
+        <div class="body" id="analyse"></div>
       </article>
     </section>
 

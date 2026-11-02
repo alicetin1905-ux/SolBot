@@ -179,6 +179,12 @@ const whenArrived = (mint, stage) => arrivals.get(`${mint}@${stage}`) || Promise
 function bindEvents() {
   on('candidate', (t) => newCandidates.add(t.mint));
 
+  // Live launches / migrations arrive from Pump.fun as tiny pulses.
+  on('sniper:launch', (l) => spawn('ex:pump', 'sniper', {
+    kind: l.kind === 'migratie' ? 'cand' : 'scan', r: l.kind === 'migratie' ? 4 : 2.5,
+    label: l.kind === 'migratie' ? `🎓 ${l.symbol || ''}`.trim() : null, dur: 1100,
+  }));
+
   on('sniper:results', (results) => {
     const list = results.slice(0, 60);
     list.forEach((r, i) => {

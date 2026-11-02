@@ -329,3 +329,11 @@ dialog form { margin-top: 14px; text-align: right; }
   .wire-flow.live { animation: none; }
   .flow-bot { transition: none; }
 }
+
+/* ---------- analyse ---------- */
+.insights { display: grid; gap: 8px; margin-bottom: 8px; }
+.insight { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); font-size: 13px; }
+.insight.ok { border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+.insight.warn { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.insight.info { border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.livefeed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 2px 0 10px; }

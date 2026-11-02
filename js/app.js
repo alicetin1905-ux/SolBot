@@ -4,12 +4,15 @@ import { SecurityBot } from './security.js';
 import { RealCheckBot } from './realcheck.js';
 import { PaperBot } from './paper.js';
 import { initFlow, updateFlow, exchangeOf } from './flow.js';
+import { TrackerBot } from './tracker.js';
+import { renderAnalyse, exportTracker, exportTrades } from './analyse.js';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
 const real = new RealCheckBot();
 const trader = new PaperBot();
 const bots = { sniper, security, real, paper: trader };
+const tracker = new TrackerBot(); // background: always on, not part of start/stop all
 
 // ---------- pipeline wiring ----------
 on('candidate', (t) => security.enqueue(t));
@@ -42,6 +45,10 @@ const SCHEMA = {
     ['minMcap', 'Min. market cap ($)'], ['maxMcap', 'Max. market cap ($)'],
     ['maxAgeH', 'Max. leeftijd pair (uur)'], ['minBuySell', 'Min. buy/sell ratio'],
     ['useGecko', 'GeckoTerminal nieuwe pools meenemen', 'bool'],
+    ['useLaunches', 'Live: nieuwe Pump.fun launches', 'bool'],
+    ['useMigrations', 'Live: migraties naar PumpSwap', 'bool'],
+    ['launchMinAgeMin', 'Launch: eerst checken na (min)'], ['launchMaxAgeMin', 'Launch: volgen tot (min)'],
+    ['curveMinMcap', 'Bonding curve: min. mcap ($)'],
   ],
   security: [
     ['maxTop10', 'Max. top 10 holders (%)'], ['maxSingleHolder', 'Max. grootste holder (%)'],
@@ -62,7 +69,8 @@ const SCHEMA = {
     ['maxPos', 'Max. open posities'], ['tp', 'Take profit (%)'], ['sl', 'Stop loss (%)'],
     ['trailAct', 'Trailing activeert bij (+%)'], ['trail', 'Trailing afstand (%)'],
     ['maxHoldMin', 'Max. houdtijd (min)'], ['slippageBps', 'Slippage (bps)'],
-    ['feeSol', 'Fee per trade (SOL)'], ['tickSec', 'Prijs update (sec)'],
+    ['feeSol', 'Fee per trade (SOL)'], ['exitTickSec', 'Exit check elke (sec)'],
+    ['maxLiqPct', 'Max. % van de pool per trade'], ['minSizeSol', 'Min. positie (SOL)'],
   ],
 };
 
@@ -81,6 +89,7 @@ function buildForms() {
       if (el.type === 'checkbox') settings[bot][el.name] = el.checked;
       else if (el.value !== '' && Number.isFinite(Number(el.value))) settings[bot][el.name] = Number(el.value);
       saveSettings();
+      if (bot === 'sniper' && /^use(Launches|Migrations)$/.test(el.name)) { sniper.closeSocket(); sniper.ensureSocket(); }
       log(bot, `Instelling ${el.name} = ${settings[bot][el.name]}`);
     });
     form.addEventListener('submit', (e) => e.preventDefault());
@@ -155,13 +164,21 @@ function renderFlow() {
 const metrics = (items) => `<div class="metrics">${items.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
 const miniBody = (id) => $(`[data-mini="${id}"] [data-mini-body]`);
 
+const SRC = { lijst: '📋', launch: '🆕', migratie: '🎓' };
+const srcTag = (o) => `<span title="${esc(o || 'lijst')}">${SRC[o] || '📋'}</span>`;
+function liveFeedLine() {
+  const l = sniper.live;
+  const cls = l.status === 'verbonden' ? 'pass' : l.status === 'uit' ? 'info' : 'warn';
+  return `<div class="livefeed">${pill(cls, `📡 live feed: ${l.status}`)} <span class="mint">${l.creates} launches · ${l.migrations} migraties · ${sniper.launches.size} in de wacht</span></div>`;
+}
+
 function renderMiniSniper() {
   const pass = sniper.results.filter((r) => r.pass);
   miniBody('sniper').innerHTML = metrics([
-    ['Gescand', sniper.results.length], ['Kandidaten', pass.length], ['Scans', sniper.scans],
-    ['Laatste scan', sniper.lastRun ? ago(Date.now() - sniper.lastRun) : '—'],
+    ['Gescand', sniper.results.length], ['Kandidaten', pass.length], ['Live launches', sniper.live.creates],
+    ['Migraties', sniper.live.migrations],
   ]) + (pass.length ? `<table><thead><tr><th>Top kandidaten</th><th>Score</th><th class="r">Liq</th><th class="r">1u</th></tr></thead><tbody>
-    ${pass.slice(0, 5).map((r) => `<tr class="click" data-mint="${esc(r.mint)}"><td class="sym">${esc(r.symbol)}</td><td>${r.score} ${bar(r.score)}</td><td class="r">$${fmt(r.liq)}</td><td class="r">${pct(r.mom, 0)}</td></tr>`).join('')}
+    ${pass.slice(0, 5).map((r) => `<tr class="click" data-mint="${esc(r.mint)}"><td class="sym">${srcTag(r.origin)} ${esc(r.symbol)}</td><td>${r.score} ${bar(r.score)}</td><td class="r">$${fmt(r.liq)}</td><td class="r">${pct(r.mom, 0)}</td></tr>`).join('')}
     </tbody></table>` : `<div class="empty">${sniper.busy ? 'Scannen…' : 'Nog geen kandidaten.'}</div>`);
 }
 
@@ -257,20 +274,21 @@ function renderEquity() {
 }
 
 function renderSniper() {
-  const rows = sniper.results.slice(0, 30);
-  $('[data-bot="sniper"] [data-body]').innerHTML = rows.length ? `
-    <table><thead><tr><th>Token</th><th>Score</th><th class="r">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th><th>Status</th></tr></thead>
+  const rows = sniper.results.slice(0, 40);
+  $('[data-bot="sniper"] [data-body]').innerHTML = liveFeedLine() + (rows.length ? `
+    <table><thead><tr><th>Token</th><th>Bron</th><th>Score</th><th class="r" title="Bij bonding curve: ~20% van market cap">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th><th>Status</th></tr></thead>
     <tbody>${rows.map((r) => `
       <tr class="click ${r.pass ? '' : 'dim'}" data-mint="${esc(r.mint)}">
         <td><span class="sym">${esc(r.symbol)}</span><div class="mint">${short(r.mint)}</div></td>
+        <td>${srcTag(r.origin)} <span class="mint">${esc(r.dex || '')}${r.curve ? ' · curve' : ''}</span></td>
         <td>${r.score} ${bar(r.score)}</td>
         <td class="r">$${fmt(r.liq)}</td><td class="r">$${fmt(r.volH1)}</td>
         <td class="r">${r.bs.toFixed(2)}</td><td class="r">${pct(r.mom, 0)}</td>
         <td class="r">${r.ageH < 999 ? ago(r.ageH * 3.6e6) : '?'}</td>
         <td>${r.pass ? pill('pass', 'kandidaat') : `<span class="reason" title="${esc(r.reason)}">${esc(r.reason)}</span>`}</td>
       </tr>`).join('')}</tbody></table>
-    <p class="mint">Scan #${sniper.scans} · ${sniper.lastRun ? ago(Date.now() - sniper.lastRun) + ' geleden' : ''}</p>`
-    : `<div class="empty">${sniper.busy ? 'Scannen…' : 'Nog geen scan. Klik op Start of Nu scannen.'}</div>`;
+    <p class="mint">📋 lijst · 🆕 live launch · 🎓 migratie — lijst-scan #${sniper.scans} · laatste check ${sniper.lastRun ? ago(Date.now() - sniper.lastRun) + ' geleden' : '—'}</p>`
+    : `<div class="empty">${sniper.busy ? 'Scannen…' : 'Nog geen scan. Klik op Start of Nu scannen.'}</div>`);
 }
 
 function renderSecurity() {
@@ -365,6 +383,9 @@ function render() {
     renderMiniSniper(); renderMiniSecurity(); renderMiniReal(); renderMiniPaper(); renderRecentTrades();
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
+    const an = $('#analyse');
+    if (an.offsetParent !== null) renderAnalyse(an, tracker);
+    $('[data-cnt="analyse"]').textContent = Object.keys(tracker.records).length || '';
   });
 }
 
@@ -456,6 +477,9 @@ function persistRunning() {
 $('#startAll').onclick = () => { Object.values(bots).forEach((b) => b.start()); persistRunning(); };
 $('#stopAll').onclick = () => { Object.values(bots).forEach((b) => b.running && b.stop()); persistRunning(); };
 $('#resetPaper').onclick = () => { if (confirm('Paper account resetten? Alle posities en historie worden gewist.')) trader.reset(); };
+$('#exportTracker').onclick = () => exportTracker(tracker);
+$('#exportTrades').onclick = () => exportTrades(paper.history);
+$('#resetTracker').onclick = () => { if (confirm('Alle metingen wissen?')) { tracker.reset(); render(); } };
 $('#resetSettings').onclick = () => {
   if (!confirm('Alle instellingen terugzetten naar standaard?')) return;
   resetSettings(); buildForms(); log('app', 'Instellingen hersteld', 'warn');
@@ -466,7 +490,7 @@ on('sniper:results', render);
 on('security:done', render);
 
 // ---------- router: one page app, so the bots keep running across pages ----------
-const ROUTES = { dashboard: 'Dashboard', sniper: 'Sniper', security: 'Security check', real: 'Real check', paper: 'Paper trader' };
+const ROUTES = { dashboard: 'Dashboard', sniper: 'Sniper', security: 'Security check', real: 'Real check', paper: 'Paper trader', analyse: 'Analyse' };
 function route() {
   const r = (location.hash.match(/^#\/(\w+)/) || [])[1];
   const page = ROUTES[r] ? r : 'dashboard';
@@ -489,6 +513,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- boot ----------
 initFlow($('#flow'));
+tracker.start();
 buildForms();
 route();
 setInterval(render, 3000);

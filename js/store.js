@@ -4,6 +4,7 @@ export const DEFAULTS = {
   sniper: {
     intervalSec: 60, minLiq: 10000, minVolH1: 3000, minMcap: 20000, maxMcap: 5000000,
     maxAgeH: 72, minBuySell: 1.0, minScore: 55, useGecko: true,
+    useLaunches: true, useMigrations: true, launchMinAgeMin: 2, launchMaxAgeMin: 30, curveMinMcap: 12000,
   },
   security: {
     maxTop10: 35, maxSingleHolder: 15, minLpLocked: 80, maxRiskScore: 50, minHolders: 100,
@@ -15,7 +16,8 @@ export const DEFAULTS = {
   },
   paper: {
     startSol: 10, sizeSol: 0.5, maxPos: 5, tp: 50, sl: 20, trailAct: 20, trail: 12,
-    maxHoldMin: 180, slippageBps: 300, feeSol: 0.0005, tickSec: 10, autoTrade: true,
+    maxHoldMin: 180, slippageBps: 300, feeSol: 0.0005, exitTickSec: 3, autoTrade: true,
+    maxLiqPct: 2, minSizeSol: 0.05,
   },
 };
 
