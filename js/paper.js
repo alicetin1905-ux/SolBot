@@ -1,6 +1,6 @@
 import { Bot } from './bot.js';
 import * as api from './api.js';
-import { settings, paper, savePaper, freshPaper, upsertToken, log } from './store.js';
+import { settings, paper, savePaper, freshPaper, upsertToken, emit, log } from './store.js';
 
 /**
  * Paper trader: simulates trades with fake SOL, but uses real Jupiter quotes
@@ -55,6 +55,7 @@ export class PaperBot extends Bot {
     upsertToken(t.mint, { stage: 'traded' });
     this.recordEquity(true);
     savePaper();
+    emit('paper:buy', pos);
     log(this.id, `🟢 PAPER BUY ${t.symbol}: ${s.sizeSol} SOL → ${fmtNum(ui)} tokens (impact ${pos.priceImpact.toFixed(2)}%)`, 'ok');
     this.changed();
   }
@@ -82,6 +83,7 @@ export class PaperBot extends Bot {
     paper.history = paper.history.slice(0, 300);
     this.recordEquity(true);
     savePaper();
+    emit('paper:sell', trade);
     log(this.id, `${pnlSol >= 0 ? '💰' : '🔻'} PAPER SELL ${pos.symbol}: ${reason} · ${pnlSol >= 0 ? '+' : ''}${pnlSol.toFixed(4)} SOL (${trade.pnlPct.toFixed(1)}%)`, pnlSol >= 0 ? 'ok' : 'err');
     this.changed();
   }

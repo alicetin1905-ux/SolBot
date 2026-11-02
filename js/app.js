@@ -3,6 +3,7 @@ import { SniperBot, fmt } from './sniper.js';
 import { SecurityBot } from './security.js';
 import { RealCheckBot } from './realcheck.js';
 import { PaperBot } from './paper.js';
+import { initFlow, updateFlow, exchangeOf } from './flow.js';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -102,19 +103,6 @@ function renderStats() {
   $$('.stats').forEach((el) => { el.innerHTML = html; });
 }
 
-function renderPipeline() {
-  const all = [...tokens.values()];
-  const st = (name) => all.filter((t) => t.stage === name).length;
-  const stages = [
-    ['sniper', '🎯 Kandidaten', sniper.results.filter((r) => r.pass).length, `${sniper.results.length} gescand`],
-    ['security', '🛡️ In security', security.queue.length + st('security'), `${security.stats.pass} ✓ · ${security.stats.fail} ✗`],
-    ['real', '👀 In observatie', real.watch.length, `${confirmedCount()} bevestigd`],
-    ['paper', '📈 Open trades', paper.positions.length, `${paper.history.length} gesloten`],
-  ];
-  $('#pipeline').innerHTML = stages.map(([route, l, n, sub], i) =>
-    `${i ? '<div class="arrow">➜</div>' : ''}<a class="stage" href="#/${route}"><div><div class="lbl">${l}</div><div class="lbl">${sub}</div></div><b>${n}</b></a>`).join('');
-}
-
 const confirmedCount = () => real.done.filter((t) => t.real && t.stage !== 'rejected').length;
 
 function renderBotHead(id) {
@@ -135,6 +123,32 @@ function renderBotHead(id) {
     paper: paper.positions.length,
   };
   $(`[data-cnt="${id}"]`).textContent = counts[id] || '';
+}
+
+// ---------- flow map ----------
+function renderFlow() {
+  const s = trader.stats();
+  const pass = sniper.results.filter((r) => r.pass).length;
+  const rejected = real.done.filter((t) => t.stage === 'rejected').length;
+  const exchanges = {};
+  for (const r of sniper.results) {
+    const e = (exchanges[exchangeOf(r.dex).id] ||= { total: 0, pass: 0 });
+    e.total++;
+    if (r.pass) e.pass++;
+  }
+  updateFlow({
+    running: Object.fromEntries(Object.entries(bots).map(([k, b]) => [k, b.running])),
+    exchanges,
+    bots: {
+      sniper: { big: String(pass), label: 'kandidaten', sub: `${sniper.results.length} gescand · scan #${sniper.scans}` },
+      security: {
+        big: `<span class="pos">${security.stats.pass}✓</span> <span class="neg">${security.stats.fail}✗</span>`,
+        label: 'veilig / afgekeurd', sub: `wachtrij ${security.queue.length}`,
+      },
+      real: { big: String(real.watch.length), label: 'in observatie', sub: `${confirmedCount()} bevestigd · ${rejected} afgewezen` },
+      paper: { big: pct(s.totalPct, 2), label: `${sol(s.equity, 2)} equity`, sub: `${paper.positions.length} open · ${s.trades} trades` },
+    },
+  });
 }
 
 // ---------- dashboard mini cards ----------
@@ -346,7 +360,7 @@ function render() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderStats(); renderPipeline();
+    renderStats(); renderFlow();
     Object.keys(bots).forEach(renderBotHead);
     renderMiniSniper(); renderMiniSecurity(); renderMiniReal(); renderMiniPaper(); renderRecentTrades();
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
@@ -394,7 +408,7 @@ function showDetail(mint) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto]');
   if (!el) return;
   const card = el.closest('[data-bot],[data-mini]');
   if (el.hasAttribute('data-clear-log')) {
@@ -418,6 +432,8 @@ document.addEventListener('click', async (e) => {
     security.addManual(el.dataset.check).catch((err) => log('security', err.message, 'err'));
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
+  } else if (el.dataset.goto) {
+    location.hash = `#/${el.dataset.goto}`;
   }
 });
 
@@ -466,7 +482,13 @@ function route() {
 window.addEventListener('hashchange', route);
 window.addEventListener('resize', () => render());
 
+document.addEventListener('keydown', (e) => {
+  const t = e.target.closest?.('[data-goto]');
+  if (t && (e.key === 'Enter' || e.key === ' ') && e.target === t) { e.preventDefault(); location.hash = `#/${t.dataset.goto}`; }
+});
+
 // ---------- boot ----------
+initFlow($('#flow'));
 buildForms();
 route();
 setInterval(render, 3000);

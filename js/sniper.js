@@ -86,7 +86,7 @@ export class SniperBot extends Bot {
       const m = scorePair(p, s);
       let reason = filterReason(m, s);
       if (!reason && m.score < s.minScore) reason = `score ${m.score} < ${s.minScore}`;
-      results.push({ mint, symbol: p.baseToken.symbol, name: p.baseToken.name, ...m, url: p.url, pass: !reason, reason });
+      results.push({ mint, symbol: p.baseToken.symbol, name: p.baseToken.name, ...m, url: p.url, dex: p.dexId, pass: !reason, reason });
 
       if (!reason && !tokens.has(mint)) {
         fresh++;

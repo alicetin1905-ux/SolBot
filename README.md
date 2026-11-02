@@ -13,7 +13,7 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 ## Pagina's
 | Pagina | Link | Inhoud |
 |--------|------|--------|
-| 📊 Dashboard | `#/dashboard` | Alle 4 bots samen: statistieken, pipeline, mini-kaart per bot (start/stop + top 5), equity grafiek, laatste trades en live log |
+| 📊 Dashboard | `#/dashboard` | **Live flow**: tegels voor de exchanges (Pump.fun, Raydium, Meteora, Orca, overig) en de 4 bots, verbonden met draden; elke coin is een pulse die doorloopt zolang hij goedgekeurd wordt. Daarnaast statistieken, mini-kaart per bot, equity grafiek, laatste trades en live log |
 | 1 · Sniper | `#/sniper` | Volledige scan-tabel, instellingen en sniper log |
 | 2 · Security | `#/security` | Wachtrij, alle checks per token, handmatig token checken, security log |
 | 3 · Real check | `#/real` | Coins in observatie, resultaten met scores, real check log |

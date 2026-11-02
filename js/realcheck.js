@@ -137,6 +137,7 @@ export class RealCheckBot extends Bot {
     } else {
       log(this.id, `✖ ${tok.symbol} niet bevestigd: ${reason}`, 'err');
     }
+    emit('real:done', tok);
     this.changed();
   }
 }
