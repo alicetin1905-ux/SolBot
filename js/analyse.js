@@ -45,7 +45,7 @@ function table(title, rows, firstCol = 'Groep') {
   </tbody></table>`;
 }
 
-function insights(recs) {
+export function insights(recs) {
   const out = [];
   const byStage = groupBy(recs, (r) => r.stage);
   const a = (k) => agg(byStage.get(k) || []);

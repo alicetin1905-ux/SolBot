@@ -8,7 +8,7 @@ export const DEFAULTS = {
   },
   security: {
     maxTop10: 35, maxSingleHolder: 15, minLpLocked: 80, maxRiskScore: 50, minHolders: 100,
-    maxRoundTrip: 10, testSol: 0.1, maxTransferFee: 0, maxInsiders: 30,
+    maxRoundTrip: 10, testSol: 0.1, maxTransferFee: 0, maxInsiders: 30, minOrganic: 15,
   },
   real: {
     rounds: 4, intervalSec: 45, maxLiqDrop: 15, minPriceChange: -8, maxPriceDev: 6,

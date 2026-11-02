@@ -5,7 +5,7 @@ import { RealCheckBot } from './realcheck.js';
 import { PaperBot } from './paper.js';
 import { initFlow, updateFlow, exchangeOf } from './flow.js';
 import { TrackerBot } from './tracker.js';
-import { renderAnalyse, exportTracker, exportTrades } from './analyse.js';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './analyse.js';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -56,6 +56,7 @@ const SCHEMA = {
     ['minHolders', 'Min. holders (waarschuwing)'], ['maxRoundTrip', 'Max. round-trip verlies (%)'],
     ['testSol', 'Honeypot test bedrag (SOL)'], ['maxTransferFee', 'Max. transfer tax (%)'],
     ['maxInsiders', 'Max. insider wallets'],
+    ['minOrganic', 'Min. organic score (Jupiter, 0-100)'],
   ],
   real: [
     ['rounds', 'Observatie rondes'], ['intervalSec', 'Tijd tussen rondes (sec)'],
@@ -134,36 +135,7 @@ function renderBotHead(id) {
   $(`[data-cnt="${id}"]`).textContent = counts[id] || '';
 }
 
-// ---------- flow map ----------
-function renderFlow() {
-  const s = trader.stats();
-  const pass = sniper.results.filter((r) => r.pass).length;
-  const rejected = real.done.filter((t) => t.stage === 'rejected').length;
-  const exchanges = {};
-  for (const r of sniper.results) {
-    const e = (exchanges[exchangeOf(r.dex).id] ||= { total: 0, pass: 0 });
-    e.total++;
-    if (r.pass) e.pass++;
-  }
-  updateFlow({
-    running: Object.fromEntries(Object.entries(bots).map(([k, b]) => [k, b.running])),
-    exchanges,
-    bots: {
-      sniper: { big: String(pass), label: 'kandidaten', sub: `${sniper.results.length} gescand · scan #${sniper.scans}` },
-      security: {
-        big: `<span class="pos">${security.stats.pass}✓</span> <span class="neg">${security.stats.fail}✗</span>`,
-        label: 'veilig / afgekeurd', sub: `wachtrij ${security.queue.length}`,
-      },
-      real: { big: String(real.watch.length), label: 'in observatie', sub: `${confirmedCount()} bevestigd · ${rejected} afgewezen` },
-      paper: { big: pct(s.totalPct, 2), label: `${sol(s.equity, 2)} equity`, sub: `${paper.positions.length} open · ${s.trades} trades` },
-    },
-  });
-}
-
-// ---------- dashboard mini cards ----------
-const metrics = (items) => `<div class="metrics">${items.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>`;
-const miniBody = (id) => $(`[data-mini="${id}"] [data-mini-body]`);
-
+// ---------- dashboard tiles ----------
 const SRC = { lijst: '📋', launch: '🆕', migratie: '🎓' };
 const srcTag = (o) => `<span title="${esc(o || 'lijst')}">${SRC[o] || '📋'}</span>`;
 function liveFeedLine() {
@@ -172,55 +144,92 @@ function liveFeedLine() {
   return `<div class="livefeed">${pill(cls, `📡 live feed: ${l.status}`)} <span class="mint">${l.creates} launches · ${l.migrations} migraties · ${sniper.launches.size} in de wacht</span></div>`;
 }
 
-function renderMiniSniper() {
+const chips = (items) => `<div class="fb-chips">${items.map(([k, v]) => `<span><b>${v}</b>${k}</span>`).join('')}</div>`;
+const miniList = (rows, empty) => (rows.length
+  ? `<ul class="fb-list">${rows.map(([l, r]) => `<li><span>${l}</span><span>${r}</span></li>`).join('')}</ul>`
+  : `<div class="fb-empty">${empty}</div>`);
+const meter = (v, cls = '') => `<div class="fb-meter ${cls}"><i style="width:${Math.max(0, Math.min(100, v))}%"></i></div>`;
+
+function sparkline(points, w = 220, h = 40) {
+  if (points.length < 2) return '';
+  const vs = points.map((p) => p.v);
+  let lo = Math.min(...vs, paper.startSol), hi = Math.max(...vs, paper.startSol);
+  if (hi - lo < 1e-9) { hi += 0.01; lo -= 0.01; }
+  const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
+  const x = (t) => ((t - t0) / Math.max(1, t1 - t0)) * w;
+  const y = (v) => h - 3 - ((v - lo) / (hi - lo)) * (h - 6);
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
+  const up = vs[vs.length - 1] >= paper.startSol;
+  return `<svg class="fb-spark ${up ? 'up' : 'down'}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-label="Equity verloop">
+    <line x1="0" x2="${w}" y1="${y(paper.startSol)}" y2="${y(paper.startSol)}" class="base"/><path d="${d}"/></svg>`;
+}
+
+function renderFlow() {
+  const s = trader.stats();
   const pass = sniper.results.filter((r) => r.pass);
-  miniBody('sniper').innerHTML = metrics([
-    ['Gescand', sniper.results.length], ['Kandidaten', pass.length], ['Live launches', sniper.live.creates],
-    ['Migraties', sniper.live.migrations],
-  ]) + (pass.length ? `<table><thead><tr><th>Top kandidaten</th><th>Score</th><th class="r">Liq</th><th class="r">1u</th></tr></thead><tbody>
-    ${pass.slice(0, 5).map((r) => `<tr class="click" data-mint="${esc(r.mint)}"><td class="sym">${srcTag(r.origin)} ${esc(r.symbol)}</td><td>${r.score} ${bar(r.score)}</td><td class="r">$${fmt(r.liq)}</td><td class="r">${pct(r.mom, 0)}</td></tr>`).join('')}
-    </tbody></table>` : `<div class="empty">${sniper.busy ? 'Scannen…' : 'Nog geen kandidaten.'}</div>`);
-}
-
-function renderMiniSecurity() {
-  const rows = security.checked.slice(0, 5);
-  miniBody('security').innerHTML = metrics([
-    ['Wachtrij', security.queue.length], ['Veilig', security.stats.pass], ['Afgekeurd', security.stats.fail],
-    ['Slagingskans', security.stats.pass + security.stats.fail ? `${Math.round(security.stats.pass / (security.stats.pass + security.stats.fail) * 100)}%` : '—'],
-  ]) + (rows.length ? `<table><thead><tr><th>Laatst gecheckt</th><th>Score</th><th>Resultaat</th></tr></thead><tbody>
-    ${rows.map((t) => { const fails = (t.security?.checks || []).filter((c) => c.status === 'fail'); return `<tr class="click" data-mint="${esc(t.mint)}"><td class="sym">${esc(t.symbol || short(t.mint))}</td><td>${t.security.score}</td>
-      <td>${fails.length ? `<span class="reason" title="${esc(fails.map((c) => c.name).join(', '))}">${esc(fails[0].name)}${fails.length > 1 ? ` +${fails.length - 1}` : ''}</span>` : pill('pass', 'veilig')}</td></tr>`; }).join('')}
-    </tbody></table>` : '<div class="empty">Nog niets gecontroleerd.</div>');
-}
-
-function renderMiniReal() {
-  const s = settings.real;
-  const done = real.done.slice(0, 5);
   const rejected = real.done.filter((t) => t.stage === 'rejected').length;
-  miniBody('real').innerHTML = metrics([
-    ['Observatie', real.watch.length], ['Bevestigd', confirmedCount()], ['Afgewezen', rejected], ['Rondes', s.rounds],
-  ]) + (real.watch.length ? `<div class="sectionlbl">Nu in observatie</div><div>${real.watch.map((w) => pill('info', `${w.symbol || short(w.mint)} ${w.snaps.length}/${s.rounds}`)).join(' ')}</div>` : '')
-    + (done.length ? `<table><thead><tr><th>Resultaat</th><th>Real</th><th>Totaal</th><th></th></tr></thead><tbody>
-    ${done.map((t) => `<tr class="click" data-mint="${esc(t.mint)}"><td class="sym">${esc(t.symbol || short(t.mint))}</td><td>${t.real.score}</td><td><b>${t.rank ?? '—'}</b></td>
-      <td>${t.stage === 'rejected' ? pill('fail', 'afgewezen') : pill('pass', 'bevestigd')}</td></tr>`).join('')}
-    </tbody></table>` : (real.watch.length ? '' : '<div class="empty">Nog geen coins geobserveerd.</div>'));
-}
 
-function renderMiniPaper() {
-  const st = trader.stats();
-  const pos = paper.positions;
-  miniBody('paper').innerHTML = metrics([
-    ['Equity', sol(st.equity, 2)], ['P&L', pct(st.totalPct)], ['Open', `${pos.length}/${settings.paper.maxPos}`], ['Win rate', st.trades ? `${st.winRate.toFixed(0)}%` : '—'],
-  ]) + (pos.length ? `<table><thead><tr><th>Open positie</th><th class="r">Waarde</th><th class="r">P&L</th><th class="r">Tijd</th></tr></thead><tbody>
-    ${pos.slice(0, 5).map((p) => `<tr class="click" data-mint="${esc(p.mint)}"><td class="sym">${esc(p.symbol)}</td><td class="r">${sol(p.lastValueSol)}</td><td class="r">${pct(p.pnlPct)}</td><td class="r">${ago(Date.now() - p.entryTs)}</td></tr>`).join('')}
-    </tbody></table>` : '<div class="empty">Geen open posities.</div>');
-}
+  // exchanges
+  const exchanges = {};
+  for (const r of sniper.results) {
+    const e = (exchanges[exchangeOf(r.dex).id] ||= { total: 0, pass: 0, last: null, lastAt: 0 });
+    e.total++;
+    if (r.pass) e.pass++;
+    if (r.seenAt >= e.lastAt) { e.lastAt = r.seenAt; e.last = r.symbol; }
+  }
 
-function renderRecentTrades() {
-  const h = paper.history.slice(0, 6);
-  $('[data-recent-trades]').innerHTML = h.length ? `<table><thead><tr><th>Token</th><th class="r">P&L</th><th class="r">Duur</th><th>Reden</th></tr></thead><tbody>
-    ${h.map((t) => `<tr class="click" data-mint="${esc(t.mint)}"><td class="sym">${esc(t.symbol)}</td><td class="r">${pct(t.pnlPct)}</td><td class="r">${ago(t.exitTs - t.entryTs)}</td><td class="reason" title="${esc(t.reason)}">${esc(t.reason)}</td></tr>`).join('')}
-    </tbody></table>` : '<div class="empty">Nog geen gesloten trades.</div>';
+  // sniper
+  const sniperDetail = chips([['gescand', sniper.results.length], ['launches', sniper.live.creates], ['migraties', sniper.live.migrations]])
+    + `<div class="fb-feed ${sniper.live.status === 'verbonden' ? 'on' : ''}">📡 live feed ${esc(sniper.live.status)}</div>`
+    + miniList(pass.slice(0, 3).map((r) => [`${srcTag(r.origin)} ${esc(r.symbol)}`, `<b>${r.score}</b>`]), 'nog geen kandidaten');
+
+  // security
+  const st = security.stats, done = st.pass + st.fail;
+  const checking = [...tokens.values()].find((t) => t.stage === 'security');
+  const reasonCount = new Map();
+  for (const t of security.checked) for (const c of t.security?.checks || []) if (c.status === 'fail') reasonCount.set(c.name, (reasonCount.get(c.name) || 0) + 1);
+  const topReasons = [...reasonCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const securityDetail = `<div class="fb-meter-row"><span>slagingskans</span><b>${done ? Math.round((st.pass / done) * 100) + '%' : '—'}</b></div>${meter(done ? (st.pass / done) * 100 : 0, 'ok')}`
+    + chips([['wachtrij', security.queue.length], ['gecheckt', done]])
+    + (checking ? `<div class="fb-feed on">🔍 checkt nu ${esc(checking.symbol || short(checking.mint))}</div>` : '')
+    + miniList(topReasons.map(([k, n]) => [`✗ ${esc(k.replace(/^Risico: /, ''))}`, n]), 'nog geen afkeuringen');
+
+  // real check
+  const rounds = settings.real.rounds;
+  const lastConf = real.done.find((t) => t.stage !== 'rejected');
+  const realDetail = chips([['bevestigd', confirmedCount()], ['afgewezen', rejected]])
+    + (real.watch.length
+      ? `<ul class="fb-list">${real.watch.slice(0, 3).map((w) => `<li class="prog"><span>${esc(w.symbol || short(w.mint))}</span><span>${w.snaps.length}/${rounds}</span>${meter((w.snaps.length / rounds) * 100)}</li>`).join('')}</ul>`
+      : '<div class="fb-empty">geen coins in observatie</div>')
+    + (lastConf ? `<div class="fb-feed gold">🏆 laatst: ${esc(lastConf.symbol)} (${lastConf.rank})</div>` : '');
+
+  // paper
+  const pts = [...paper.equityHist.slice(-120), { t: Date.now(), v: s.equity }];
+  const paperDetail = sparkline(pts)
+    + chips([['saldo', s.balance.toFixed(2) + '◎'], ['open', `${paper.positions.length}/${settings.paper.maxPos}`], ['win', s.trades ? Math.round(s.winRate) + '%' : '—']])
+    + miniList(paper.positions.slice(0, 3).map((p) => [esc(p.symbol), pct(p.pnlPct)]), 'geen open posities');
+
+  // analyse
+  const recs = tracker.list();
+  const a = agg(recs);
+  const ins = insights(recs)[0];
+  updateFlow({
+    running: Object.fromEntries(Object.entries(bots).map(([k, b]) => [k, b.running])),
+    exchanges,
+    bots: {
+      sniper: { big: String(pass.length), label: 'kandidaten', detail: sniperDetail },
+      security: {
+        big: `<span class="pos">${st.pass}✓</span> <span class="neg">${st.fail}✗</span>`,
+        label: 'veilig / afgekeurd', detail: securityDetail,
+      },
+      real: { big: String(real.watch.length), label: 'in observatie', detail: realDetail },
+      paper: { big: pct(s.totalPct, 2), label: `${s.equity.toFixed(3)} ◎ equity`, detail: paperDetail },
+    },
+    analyse: {
+      stats: chips([['gevolgd', recs.length], ['gemeten', a.m], ['winnaar', a.win == null ? '—' : Math.round(a.win) + '%'], ['rug', a.rug == null ? '—' : Math.round(a.rug) + '%']]),
+      insight: ins ? `${ins[0] === 'ok' ? '✅' : ins[0] === 'warn' ? '⚠️' : '💡'} ${esc(ins[1])}` : '',
+    },
+  });
 }
 
 // ---------- equity chart (single series SVG line + hover crosshair) ----------
@@ -380,7 +389,6 @@ function render() {
     pending = false;
     renderStats(); renderFlow();
     Object.keys(bots).forEach(renderBotHead);
-    renderMiniSniper(); renderMiniSecurity(); renderMiniReal(); renderMiniPaper(); renderRecentTrades();
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
     const an = $('#analyse');

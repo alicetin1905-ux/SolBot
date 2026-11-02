@@ -6,14 +6,14 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 | # | Bot | Wat hij doet |
 |---|-----|--------------|
 | 1 | **Sniper** | Live feed via PumpPortal: elke nieuwe Pump.fun launch en elke migratie naar PumpSwap, direct bij creatie. Daarnaast DexScreener (profielen, boosts) en GeckoTerminal nieuwe pools. Scoort elke coin op liquiditeit, volume/liquiditeit, buy/sell ratio, momentum, leeftijd, transacties en socials. |
-| 2 | **Security check** | RugCheck rapport: mint authority, freeze authority, gerugd, gevaarlijke Token-2022 extensies, transfer tax, LP locked/burned %, top 10 holders, grootste holder, insider netwerken, aantal holders, RugCheck risico's. **Honeypot test**: simuleert een koop én verkoop via Jupiter en meet het round-trip verlies. |
+| 2 | **Security check** | Jupiter audit (organic score tegen wash trading, verdacht-vlag; en fallback als RugCheck niet werkt) + RugCheck rapport: mint authority, freeze authority, gerugd, gevaarlijke Token-2022 extensies, transfer tax, LP locked/burned %, top 10 holders, grootste holder, insider netwerken, aantal holders, RugCheck risico's. **Honeypot test**: simuleert een koop én verkoop via Jupiter en meet het round-trip verlies. |
 | 3 | **Real check** | Observeert goedgekeurde coins meerdere rondes: blijft de liquiditeit staan, gaat de prijs niet onderuit, blijven kopers komen, klopt de DexScreener prijs met Jupiter, en is de coin nog steeds verkoopbaar. Geeft een totaalscore. |
 | 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL, op basis van echte Jupiter quotes (inclusief price impact en tax). Exits worden elke 3 sec gecheckt via Jupiter prijzen. Max. positie = 2% van de pool. Take profit, stop loss, trailing stop, max houdtijd en rug-alarm (liquiditeit -50%). |
 
 ## Pagina's
 | Pagina | Link | Inhoud |
 |--------|------|--------|
-| 📊 Dashboard | `#/dashboard` | **Live flow**: tegels voor de exchanges (Pump.fun, Raydium, Meteora, Orca, overig) en de 4 bots, verbonden met draden; elke coin is een pulse die doorloopt zolang hij goedgekeurd wordt. Daarnaast statistieken, mini-kaart per bot, equity grafiek, laatste trades en live log |
+| 📊 Dashboard | `#/dashboard` | Alleen tegels: exchanges (Pump.fun, Raydium, Meteora, Orca, overig), de 4 bots en Analyse, verbonden met draden. Elke coin is een pulse die doorloopt zolang hij goedgekeurd wordt. Elke tegel toont de kerncijfers, top-coins, voortgang en laatste gebeurtenis; klik om de pagina te openen |
 | 1 · Sniper | `#/sniper` | Volledige scan-tabel, instellingen en sniper log |
 | 2 · Security | `#/security` | Wachtrij, alle checks per token, handmatig token checken, security log |
 | 3 · Real check | `#/real` | Coins in observatie, resultaten met scores, real check log |

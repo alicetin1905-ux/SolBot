@@ -30,7 +30,7 @@ export class SecurityBot extends Bot {
     log(this.id, `🔍 Check ${t.symbol || t.mint.slice(0, 6)}…`);
     let result;
     try {
-      result = await this.audit(t.mint);
+      result = await this.audit(t.mint, t.attempts || 0);
     } catch (e) {
       if (!(e instanceof RetryLater)) throw e;
       t.attempts = (t.attempts || 0) + 1;
@@ -64,20 +64,32 @@ export class SecurityBot extends Bot {
     emit('security:done', tok);
   }
 
-  async audit(mint) {
+  async audit(mint, attempts = 0) {
     const s = settings.security;
     const checks = [];
     const add = (name, status, detail) => checks.push({ name, status, detail });
+
+    // ---- Jupiter token audit (always; also the fallback when RugCheck is down) ----
+    let j = null;
+    try { j = await api.jupToken(mint); } catch { /* optional */ }
 
     // ---- RugCheck on-chain report ----
     let r = null;
     try { r = await api.rugReport(mint); }
     catch (e) {
-      if (api.isTransient(e)) throw new RetryLater(`RugCheck: ${e.message}`);
-      add('RugCheck rapport', 'fail', `niet beschikbaar (${e.message})`);
+      // Rate limit / timeout: try again later once, then fall back to Jupiter's audit.
+      if (api.isTransient(e) && attempts < 1) throw new RetryLater(`RugCheck: ${e.message}`);
+      if (!j) {
+        if (api.isTransient(e)) throw new RetryLater(`RugCheck: ${e.message}`);
+        add('RugCheck rapport', 'fail', `niet beschikbaar (${e.message}) en geen Jupiter audit`);
+      } else {
+        add('RugCheck rapport', 'warn', `niet beschikbaar (${e.message}): Jupiter audit gebruikt, LP-lock en insiders niet gecheckt`);
+        this.jupiterFallback(j, add);
+      }
     }
+    if (j) this.jupiterExtras(j, add);
 
-    let decimals = 6, symbol = '', name = '';
+    let decimals = j?.decimals ?? 6, symbol = j?.symbol || '', name = j?.name || '';
     if (r) {
       decimals = r.token?.decimals ?? 6;
       symbol = r.tokenMeta?.symbol || '';
@@ -168,6 +180,33 @@ export class SecurityBot extends Bot {
     const warns = checks.filter((c) => c.status === 'warn').length;
     const score = Math.max(0, 100 - fails * 25 - warns * 7);
     return { checks, score, roundTrip, decimals, symbol, name, at: Date.now() };
+  }
+
+  /** Core checks from Jupiter's token audit, used when RugCheck is unavailable. */
+  jupiterFallback(j, add) {
+    const s = settings.security;
+    const a = j.audit || {};
+    add('Mint authority', a.mintAuthorityDisabled ? 'pass' : 'fail',
+      a.mintAuthorityDisabled ? 'ingetrokken (Jupiter)' : 'actief of onbekend: er kunnen tokens bijgemint worden');
+    add('Freeze authority', a.freezeAuthorityDisabled ? 'pass' : 'fail',
+      a.freezeAuthorityDisabled ? 'ingetrokken (Jupiter)' : 'actief of onbekend: tokens kunnen bevroren worden');
+    if (a.topHoldersPercentage != null) {
+      add('Top holders', a.topHoldersPercentage > s.maxTop10 ? 'fail' : 'pass', `${a.topHoldersPercentage.toFixed(1)}% van supply (Jupiter)`);
+    }
+    const nh = j.holderCount || 0;
+    add('Aantal holders', nh >= s.minHolders ? 'pass' : 'warn', `${nh}`);
+    if ((a.devMints || 0) > 20) add('Dev geschiedenis', 'warn', `dev heeft al ${a.devMints} tokens gemaakt`);
+  }
+
+  /** Extra signals Jupiter has that RugCheck doesn't: wash trading and "suspicious" flag. */
+  jupiterExtras(j, add) {
+    const s = settings.security;
+    const a = j.audit || {};
+    if (a.isSus) add('Jupiter: verdacht token', 'fail', 'Jupiter markeert dit token als verdacht');
+    if (j.organicScore != null) {
+      add('Organische handel', j.organicScore < s.minOrganic ? 'fail' : j.organicScore < s.minOrganic * 2 ? 'warn' : 'pass',
+        `organic score ${j.organicScore.toFixed(0)}/100 (${j.organicScoreLabel || '?'}); laag = veel bot/wash trading`);
+    }
   }
 
   /** Manually push a mint (from the UI) through the pipeline. */

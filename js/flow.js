@@ -42,31 +42,47 @@ export function initFlow(container) {
       <div class="flow-ex">
         <div class="flow-col-title">Exchanges</div>
         ${EXCHANGES.map((e) => `
-          <div class="ex-tile" data-node="ex:${e.id}" data-ex="${e.id}">
+          <div class="ex-tile" data-node="ex:${e.id}" data-ex="${e.id}" data-goto="sniper" title="${e.name}: coins uit de laatste 20 min">
             <span class="ex-logo">${e.logo}</span>
-            <div class="ex-txt"><b class="ex-name">${e.name}</b><b class="ex-short">${e.short}</b><small data-ex-count>—</small></div>
+            <div class="ex-txt">
+              <div class="ex-row"><b class="ex-name">${e.name}</b><b class="ex-short">${e.short}</b><span class="ex-num" data-ex-num>0</span></div>
+              <div class="ex-bar"><i data-ex-bar></i></div>
+              <small data-ex-count>geen coins</small>
+            </div>
           </div>`).join('')}
       </div>
       ${BOTS.map((b) => `
         <div class="flow-bot" data-node="${b.id}" data-mini="${b.id}" data-goto="${b.id}" tabindex="0" role="link" aria-label="Open ${b.name} pagina">
-          <div class="fb-top">
+          <div class="fb-head">
             <span class="fb-icon">${b.icon}</span>
-            <span class="status" data-status></span>
+            <div class="fb-titles">
+              <div class="fb-name"><span class="fb-n">${b.n}</span>${b.name}</div>
+              <span class="status" data-status></span>
+            </div>
           </div>
-          <div class="fb-name"><span class="fb-n">${b.n}</span>${b.name}</div>
-          <div class="fb-big" data-big>—</div>
-          <div class="fb-label" data-label></div>
-          <div class="fb-sub" data-sub></div>
+          <div class="fb-kpi"><div class="fb-big" data-big>—</div><div class="fb-label" data-label></div></div>
+          <div class="fb-detail" data-detail></div>
           <div class="fb-event" data-event></div>
-          <button class="btn small primary" data-toggle>Start</button>
+          <div class="fb-foot"><button class="btn small primary" data-toggle>Start</button><span class="fb-open">Openen →</span></div>
         </div>`).join('')}
     </div>
-    <div class="flow-legend">
-      <span><i class="lg scan"></i>gescand</span>
-      <span><i class="lg cand"></i>kandidaat</span>
-      <span><i class="lg safe"></i>veilig</span>
-      <span><i class="lg conf"></i>bevestigd</span>
-      <span><i class="lg bad"></i>afgekeurd</span>
+    <div class="flow-bottom">
+      <div class="flow-an" data-node="analyse" data-goto="analyse" tabindex="0" role="link" aria-label="Open Analyse pagina">
+        <span class="fb-icon">🔬</span>
+        <div class="an-main">
+          <div class="fb-name">Analyse <span class="fb-label">werken de filters?</span></div>
+          <div class="an-stats" data-an-stats></div>
+          <div class="an-insight" data-an-insight></div>
+        </div>
+        <span class="fb-open">Openen →</span>
+      </div>
+      <div class="flow-legend">
+        <span><i class="lg scan"></i>gescand</span>
+        <span><i class="lg cand"></i>kandidaat</span>
+        <span><i class="lg safe"></i>veilig</span>
+        <span><i class="lg conf"></i>bevestigd</span>
+        <span><i class="lg bad"></i>afgekeurd</span>
+      </div>
     </div>`;
   svg = root.querySelector('.flow-svg');
   wireLayer = svg.querySelector('.flow-wires');
@@ -248,21 +264,31 @@ function bindEvents() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) layout(); });
 }
 
-/** Called from the app render loop with fresh numbers. */
-export function updateFlow({ bots, exchanges, running }) {
+/** Called from the app render loop with fresh numbers (HTML is pre-escaped by the caller). */
+export function updateFlow({ bots, exchanges, running, analyse }) {
   if (!root) return;
   for (const [id, v] of Object.entries(bots)) {
     const el = node(id);
     el.querySelector('[data-big]').innerHTML = v.big;
     el.querySelector('[data-label]').textContent = v.label;
-    el.querySelector('[data-sub]').textContent = v.sub;
+    const det = el.querySelector('[data-detail]');
+    if (det._html !== v.detail) { det.innerHTML = v.detail; det._html = v.detail; }
     el.classList.toggle('running', !!running[id]);
   }
+  const total = Object.values(exchanges).reduce((a, c) => a + c.total, 0);
   for (const e of EXCHANGES) {
     const c = exchanges[e.id] || { total: 0, pass: 0 };
     const el = node(`ex:${e.id}`);
-    el.querySelector('[data-ex-count]').textContent = c.total ? `${c.total} coins · ${c.pass} ✓` : '—';
+    el.querySelector('[data-ex-num]').textContent = c.total;
+    el.querySelector('[data-ex-bar]').style.width = `${total ? (c.total / total) * 100 : 0}%`;
+    el.querySelector('[data-ex-count]').textContent = c.total
+      ? `${c.pass} kandidaat${c.pass === 1 ? '' : 'en'}${c.last ? ` · ${c.last}` : ''}` : 'geen coins';
     el.classList.toggle('active', c.total > 0);
+  }
+  if (analyse) {
+    const an = node('analyse');
+    an.querySelector('[data-an-stats]').innerHTML = analyse.stats;
+    an.querySelector('[data-an-insight]').innerHTML = analyse.insight;
   }
   for (const w of wires.values()) w.flow.classList.toggle('live', !!running[w.to]);
 }

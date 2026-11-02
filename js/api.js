@@ -25,7 +25,7 @@ const limits = {
   ds: limiter(250),      // DexScreener: ~300 req/min on pair endpoints
   dsMeta: limiter(1100), // DexScreener profile/boost endpoints: 60 req/min
   rug: limiter(4200),    // RugCheck: ~15 req/min
-  jup: limiter(1100),    // Jupiter lite API
+  jup: limiter(1250),    // Jupiter lite API (shared by all bots)
   gecko: limiter(2500),  // GeckoTerminal: ~30 req/min
 };
 
@@ -118,6 +118,12 @@ export function jupQuote(inputMint, outputMint, amountRaw, slippageBps = 500) {
     inputMint, outputMint, amount: String(amountRaw), slippageBps: String(slippageBps),
   });
   return limits.jup(() => getJSON(`${JUP}/swap/v1/quote?${q}`));
+}
+
+/** Jupiter token info incl. audit (mint/freeze authority, top holders, organic score). */
+export async function jupToken(mint) {
+  const res = await limits.jup(() => getJSON(`${JUP}/tokens/v2/search?query=${mint}`));
+  return (Array.isArray(res) ? res : []).find((t) => t.id === mint) || null;
 }
 
 export async function jupPrices(mints) {
