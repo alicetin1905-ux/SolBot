@@ -7,6 +7,7 @@
 // Data lives in ~/SolBot-data (or $SOLBOT_DATA): storage.json (settings, paper account,
 // measurements, model), config.json (port, access code, optional ntfy topic), server.log.
 import http from 'node:http';
+import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -191,6 +192,21 @@ server.on('error', (e) => {
   }
 });
 server.on('listening', () => writeJSON(CONFIG_FILE, config));
+
+// macOS lets two programs share a port when one listens on 127.0.0.1 only (e.g. another bot):
+// then "localhost" would reach that other program. So first check if anything answers locally.
+const portTaken = (port) => new Promise((resolve) => {
+  const sock = net.connect({ host: '127.0.0.1', port });
+  sock.setTimeout(700);
+  sock.once('connect', () => { sock.destroy(); resolve(true); });
+  sock.once('timeout', () => { sock.destroy(); resolve(false); });
+  sock.once('error', () => resolve(false));
+});
+for (let i = 0; i < 20 && await portTaken(config.port); i++) {
+  say(`⚠️ Poort ${config.port} wordt al gebruikt door een ander programma op deze Mac, SolBot neemt poort ${config.port + 1}`);
+  config.port++;
+}
+
 server.listen(config.port, '0.0.0.0', () => {
   const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   say('──────────────────────────────────────────────');
