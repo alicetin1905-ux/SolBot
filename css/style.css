@@ -584,3 +584,5 @@ dialog .insight { margin-top: 12px; }
 .srcline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 12px; }
 .srcline .chip b { margin-left: 2px; }
 @media (max-width: 700px) { .profiles { order: 3; width: 100%; } .pchip { flex: 1; padding: 6px 4px; font-size: 12px; } }
+
+table.nice tr.cur td { background: color-mix(in srgb, var(--accent) 8%, transparent); }

@@ -1,6 +1,6 @@
 // Flow map: exchange tiles -> bot tiles, joined by wires. Every coin is a
 // pulse that travels along the wires while it keeps getting approved.
-import { on } from './store.js?v=20261102235128';
+import { on } from './store.js?v=20261103000915';
 
 export const EXCHANGES = [
   { id: 'pump', name: 'Pump.fun', short: 'Pump', logo: 'P', match: /pump/i },
@@ -256,6 +256,7 @@ function bindEvents() {
   });
 
   on('paper:buy', (p) => setEvent('paper', 'ok', `🟢 BUY ${p.symbol}`));
+  on('paper:partial', (p) => { flash('paper', 'gold'); setEvent('paper', 'gold', `🟡 deel verkocht ${p.symbol} +${p.pnlPct.toFixed(1)}%`); });
   on('paper:sell', (t) => {
     flash('paper', t.pnlSol >= 0 ? 'ok' : 'bad');
     setEvent('paper', t.pnlSol >= 0 ? 'ok' : 'bad', `${t.pnlSol >= 0 ? '💰' : '🔻'} SELL ${t.symbol} ${t.pnlPct >= 0 ? '+' : ''}${t.pnlPct.toFixed(1)}%`);

@@ -1,6 +1,8 @@
 // Analyse page: turns tracker records into "do my filters work?" answers.
-import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261102235128';
-import { exchangeOf } from './flow.js?v=20261102235128';
+import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261103000915';
+import { exchangeOf } from './flow.js?v=20261103000915';
+import { exitKind } from './paper.js?v=20261103000915';
+import { settings } from './store.js?v=20261103000915';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const median = (a) => {
@@ -86,7 +88,98 @@ export function insights(recs) {
   return out;
 }
 
-export function renderAnalyse(el, tracker) {
+// ---------- trade analysis ----------
+export function tradeAgg(trades) {
+  const pnl = trades.map((t) => t.pnlPct);
+  return {
+    n: trades.length,
+    win: trades.length ? (trades.filter((t) => t.pnlSol > 0).length / trades.length) * 100 : null,
+    avg: trades.length ? pnl.reduce((a, b) => a + b, 0) / trades.length : null,
+    sum: trades.reduce((a, t) => a + t.pnlSol, 0),
+    best: trades.length ? Math.max(...pnl) : null,
+    worst: trades.length ? Math.min(...pnl) : null,
+  };
+}
+
+function tradeTable(title, rows, firstCol, sub = '') {
+  if (!rows.length) return '';
+  return `<article class="card"><header class="card-head"><div class="title"><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div></header><div class="body">
+  <table class="nice"><thead><tr><th>${firstCol}</th><th class="r">Trades</th><th class="r">Win rate</th><th class="r">Gem. P&L</th><th class="r">Totaal</th><th class="r">Beste</th><th class="r">Slechtste</th></tr></thead><tbody>
+  ${rows.map(([label, a]) => `<tr><td>${label}</td><td class="r">${a.n}</td><td class="r">${rate(a.win, 'pos')}</td><td class="r">${pctCell(a.avg, 1)}</td>
+    <td class="r"><span class="${a.sum >= 0 ? 'pos' : 'neg'}">${a.sum >= 0 ? '+' : ''}${a.sum.toFixed(3)} ◎</span></td><td class="r">${pctCell(a.best)}</td><td class="r">${pctCell(a.worst)}</td></tr>`).join('')}
+  </tbody></table></div></article>`;
+}
+
+// ---------- exit optimizer ----------
+/**
+ * Replays one recorded price path (minutes, % vs. price at confirmation) with
+ * the given exit rules. Conservative: stops fill at the sampled (worse) price,
+ * take profits fill exactly at their level. Returns the trade result in %.
+ */
+export function simulate(path, cfg, costPct, partialFrac) {
+  let frac = 1, realized = 0, peak = 0, partialDone = false;
+  const done = (pct) => (realized + frac * (1 + pct / 100) - 1) * 100 - costPct;
+  for (const [, pct] of path) {
+    if (pct > peak) peak = pct;
+    if (pct <= -cfg.sl) return done(pct);
+    if (cfg.partialTp && !partialDone && pct >= cfg.partialTp) {
+      realized += partialFrac * (1 + cfg.partialTp / 100);
+      frac -= partialFrac;
+      partialDone = true;
+    }
+    if (pct >= cfg.tp) return done(cfg.tp);
+    if (cfg.trailAct && peak >= cfg.trailAct && pct <= peak - cfg.trail) return done(pct);
+  }
+  return done(path.length ? path[path.length - 1][1] : 0);
+}
+
+export function optimize(paths, costPct, partialFrac) {
+  const grid = [];
+  for (const tp of [40, 60, 100, 150, 250]) for (const sl of [10, 15, 20, 30]) for (const [trailAct, trail] of [[0, 0], [20, 10], [20, 15], [30, 20]]) {
+    for (const partialTp of [0, 20, 35]) if (!partialTp || partialTp < tp) grid.push({ tp, sl, trailAct, trail, partialTp });
+  }
+  const evalCfg = (cfg) => {
+    const r = paths.map((p) => simulate(p, cfg, costPct, partialFrac));
+    return { cfg, avg: r.reduce((a, b) => a + b, 0) / r.length, win: (r.filter((x) => x > 0).length / r.length) * 100, med: median(r) };
+  };
+  return { results: grid.map(evalCfg).sort((a, b) => b.avg - a.avg), evalCfg };
+}
+
+let optCache = { key: null };
+const cfgLabel = (c) => `TP +${c.tp}% · SL −${c.sl}% · ${c.trailAct ? `trailing ${c.trail}% na +${c.trailAct}%` : 'geen trailing'} · ${c.partialTp ? `deel bij +${c.partialTp}%` : 'geen deelverkoop'}`;
+
+function optimizerCard(recs, history) {
+  const paths = recs.filter((r) => r.path && r.path.length >= 10).map((r) => r.path);
+  const head = `<article class="card"><header class="card-head"><div class="title"><h2>Exit-optimizer</h2>
+    <p>Speelt het echte prijsverloop van elke bevestigde coin (elke 30s gemeten, tot 3u) opnieuw af met andere verkoop-instellingen. Instap = moment van bevestiging.</p></div></header><div class="body">`;
+  if (paths.length < 5) {
+    return `${head}<div class="empty big">🧪 Nog ${paths.length}/5 bevestigde coins met genoeg prijsdata. Laat de bots draaien; elke bevestigde coin wordt 3 uur gevolgd.</div></div></article>`;
+  }
+  const costs = history.map((t) => t.entryCost).filter((x) => x != null);
+  const cost = costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : 3;
+  const s = settings.paper;
+  const partialFrac = (s.partialSell || 50) / 100;
+  // Recompute only when the data or the settings change (the page re-renders every few seconds).
+  const curCfg = { tp: s.tp, sl: s.sl, trailAct: s.trailAct, trail: s.trail, partialTp: s.partialTp };
+  const key = `${paths.length}:${paths.reduce((a, p) => a + p.length, 0)}:${cost.toFixed(2)}:${partialFrac}:${JSON.stringify(curCfg)}`;
+  if (optCache.key !== key) {
+    const { results, evalCfg } = optimize(paths, cost, partialFrac);
+    optCache = { key, results, cur: evalCfg(curCfg) };
+  }
+  const { results, cur } = optCache;
+  const row = (r, isCur) => `<tr${isCur ? ' class="cur"' : ''}><td>${isCur ? '<b>Huidige instellingen</b><br>' : ''}<span class="${isCur ? 'mint' : ''}">${cfgLabel(r.cfg)}</span></td>
+    <td class="r">${pctCell(r.avg, 1)}</td><td class="r">${pctCell(r.med, 1)}</td><td class="r">${rate(r.win, 'pos')}</td>
+    <td class="r">${isCur ? '' : `<button class="btn small primary" data-apply-exit='${esc(JSON.stringify(r.cfg))}'>Toepassen</button>`}</td></tr>`;
+  return `${head}
+    ${paths.length < 30 ? `<div class="insight warn">⚠️ Pas ${paths.length} coins: de beste instelling kan toeval zijn. Vanaf ~30 coins wordt dit betrouwbaarder.</div>` : ''}
+    <table class="nice"><thead><tr><th>Instellingen</th><th class="r">Gem. per trade</th><th class="r">Mediaan</th><th class="r">Win rate</th><th></th></tr></thead><tbody>
+      ${row(cur, true)}${results.slice(0, 5).map((r) => row(r, false)).join('')}
+    </tbody></table>
+    <p class="mint">${paths.length} coins · ${results.length} combinaties getest · kosten ${cost.toFixed(1)}% per trade meegerekend · break-even, dode-coin en verkoopdruk-exits niet gesimuleerd</p>
+  </div></article>`;
+}
+
+export function renderAnalyse(el, tracker, history = []) {
   const recs = tracker.list();
   const ins = insights(recs);
   const byStage = groupBy(recs, (r) => r.stage);
@@ -110,6 +203,16 @@ export function renderAnalyse(el, tracker) {
   const scoreRows = ['70+', '55–69', '40–54', '< 40'].filter((k) => scoreGroups.has(k)).map((k) => [`Score ${k}`, agg(scoreGroups.get(k))]);
 
   const recent = [...recs].sort((a, b) => b.t0 - a.t0).slice(0, 60);
+  const tg = (fn) => [...groupBy(history, fn).entries()].map(([k, v]) => [esc(k), tradeAgg(v)]).sort((a, b) => b[1].n - a[1].n);
+  const rankBucket = (r) => (r == null ? 'onbekend' : r >= 80 ? 'Score 80+' : r >= 70 ? 'Score 70–79' : r >= 60 ? 'Score 60–69' : 'Score < 60');
+  const tradeSection = history.length ? `
+    ${tradeTable('Trades per verkoopreden', tg((t) => t.exitKind || exitKind(t.reason)), 'Verkoopreden', 'Waar komt de winst vandaan en waar lekt het weg?')}
+    <div class="agrid">
+      ${tradeTable('Trades per score', tg((t) => rankBucket(t.rank)), 'Totaalscore')}
+      ${tradeTable('Trades per bron', tg((t) => t.origin || 'lijst'), 'Bron')}
+      ${tradeTable('Trades per profiel', tg((t) => t.profile || 'onbekend'), 'Profiel')}
+      ${tradeTable('Trades per exchange', tg((t) => exchangeOf(t.dex).name), 'Exchange')}
+    </div>` : `<article class="card"><header class="card-head"><div class="title"><h2>Trade-analyse</h2></div></header><div class="body"><div class="empty big">📈 Nog geen gesloten paper trades.</div></div></article>`;
   const ago = (ms) => (ms < 3.6e6 ? `${Math.round(ms / 60000)}m` : `${(ms / 3.6e6).toFixed(1)}u`);
 
   el.innerHTML = `
@@ -125,6 +228,8 @@ export function renderAnalyse(el, tracker) {
       ${table('Per bron', srcRows, 'Bron')}
       ${table('Per sniper score', scoreRows, 'Score')}
     </div>
+    ${tradeSection}
+    ${optimizerCard(recs, history)}
     <article class="card"><header class="card-head"><div class="title"><h2>Laatst gevolgde coins</h2><p>Klik voor details</p></div></header><div class="body">
     ${recent.length ? `<table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Uitkomst</th><th class="r">Gezien</th><th class="r">15m</th><th class="r">1u</th><th class="r">6u</th><th class="r">Max</th><th></th></tr></thead><tbody>
       ${recent.map((r) => `<tr class="click" data-mint="${esc(r.mint)}">

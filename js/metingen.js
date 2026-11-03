@@ -1,13 +1,14 @@
 // Outcome tracker: follows every coin the sniper looked at (also the rejected
 // ones) and stores what its price did after 5m … 6h. This tells you whether the
 // filters keep the winners and block the rugs.
-import { Bot } from './bot.js?v=20261102235128';
-import * as api from './api.js?v=20261102235128';
-import { on, currentProfile } from './store.js?v=20261102235128';
+import { Bot } from './bot.js?v=20261103000915';
+import * as api from './api.js?v=20261103000915';
+import { on, currentProfile } from './store.js?v=20261103000915';
 
 export const CHECKPOINTS = [5, 15, 30, 60, 120, 240, 360]; // minutes
 export const WIN_PCT = 50;   // "winner" = ever >= +50% after first seen
-export const RUG_PCT = -80;  // "rug" = price <= -80% or liquidity -80%
+export const RUG_PCT = -80;
+export const PATH_MIN = 180; // minutes of price path kept per confirmed coin  // "rug" = price <= -80% or liquidity -80%
 const KEY = 'solbot.tracker.v1';
 const MAX = 1500;
 
@@ -36,10 +37,25 @@ export class TrackerBot extends Bot {
       if (t.stage === 'rejected' && fails.length) this.set(t.mint, { stage: 'security-fail', fails, sec: t.security?.score });
       else this.set(t.mint, { sec: t.security?.score });
     });
-    on('real:done', (t) => this.set(t.mint, {
-      stage: t.stage === 'rejected' ? 'real-fail' : 'confirmed', real: t.real?.score, rank: t.rank,
-      reason: t.stage === 'rejected' ? t.rejectReason : undefined,
-    }));
+    on('real:done', (t) => {
+      const ok = t.stage !== 'rejected';
+      const price = Number(t.pair?.priceUsd) || 0;
+      if (ok && price && !this.records[t.mint]) {
+        // Confirmed coins always get a record, so their price path can be followed.
+        this.records[t.mint] = {
+          mint: t.mint, sym: t.symbol, dex: t.pair?.dexId, origin: t.origin || 'lijst', t0: Date.now(), p0: price,
+          liq0: t.pair?.liquidity?.usd || 0, mc0: t.pair?.marketCap || 0, score: t.sniperScore, stage: 'pending',
+          cp: {}, max: 0, min: 0, rug: false, done: false, profile: currentProfile() || 'aangepast',
+        };
+      }
+      this.set(t.mint, {
+        stage: ok ? 'confirmed' : 'real-fail', real: t.real?.score, rank: t.rank,
+        reason: ok ? undefined : t.rejectReason,
+        // Start of the price path used by the exit optimizer (entry = moment of confirmation).
+        conf: ok && price ? { t: Date.now(), p: price } : undefined,
+        path: ok && price ? [] : undefined,
+      });
+    });
     on('paper:buy', (p) => this.set(p.mint, { stage: 'traded' }));
   }
 
@@ -69,8 +85,17 @@ export class TrackerBot extends Bot {
   async tick() {
     const now = Date.now();
     const due = Object.values(this.records).filter((r) => !r.done && CHECKPOINTS.some((c) => r.cp[c] === undefined && now >= r.t0 + c * 60000));
-    if (due.length) {
-      const pairs = api.bestPairs(await api.dsPairsForTokens(due.slice(0, 600).map((r) => r.mint)));
+    // Confirmed coins: one price sample every ~30s for PATH_MIN minutes (input for the exit optimizer).
+    const pathRecs = Object.values(this.records).filter((r) => r.conf && r.path && now - r.conf.t <= PATH_MIN * 60000 && (!r.pathAt || now - r.pathAt >= 25000));
+    if (due.length || pathRecs.length) {
+      const pairs = api.bestPairs(await api.dsPairsForTokens([...new Set([...due.slice(0, 600), ...pathRecs].map((r) => r.mint))]));
+      for (const r of pathRecs) {
+        const price = Number(pairs.get(r.mint)?.priceUsd) || 0;
+        if (!price) continue;
+        r.path.push([Math.round(((now - r.conf.t) / 60000) * 10) / 10, Math.round((price / r.conf.p - 1) * 1000) / 10]);
+        r.pathAt = now;
+      }
+      this.dirty = true;
       for (const r of due.slice(0, 600)) {
         const p = pairs.get(r.mint);
         const ageMin = (now - r.t0) / 60000;

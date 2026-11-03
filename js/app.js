@@ -1,11 +1,11 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261102235128';
-import { SniperBot, fmt } from './sniper.js?v=20261102235128';
-import { SecurityBot } from './security.js?v=20261102235128';
-import { RealCheckBot } from './realcheck.js?v=20261102235128';
-import { PaperBot } from './paper.js?v=20261102235128';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261102235128';
-import { TrackerBot } from './metingen.js?v=20261102235128';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261102235128';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103000915';
+import { SniperBot, fmt } from './sniper.js?v=20261103000915';
+import { SecurityBot } from './security.js?v=20261103000915';
+import { RealCheckBot } from './realcheck.js?v=20261103000915';
+import { PaperBot } from './paper.js?v=20261103000915';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103000915';
+import { TrackerBot } from './metingen.js?v=20261103000915';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103000915';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -74,6 +74,17 @@ const SCHEMA = {
     ['maxHoldMin', 'Max. houdtijd (min)'], ['slippageBps', 'Slippage (bps)'],
     ['feeSol', 'Fee per trade (SOL)'], ['exitTickSec', 'Exit check elke (sec)'],
     ['maxLiqPct', 'Max. % van de pool per trade'], ['minSizeSol', 'Min. positie (SOL)'],
+    ['partialTp', 'Deelverkoop bij (+%) · 0 = uit'], ['partialSell', 'Deelverkoop: % verkopen'],
+    ['beAct', 'Break-even stop vanaf piek (+%) · 0 = uit'],
+    ['staleMin', 'Dode coin na (min) · 0 = uit'], ['staleBand', 'Dode coin: binnen ±%'],
+    ['sellPressure', 'Verkoopdruk: sells ≥ × buys (5m) · 0 = uit'],
+    ['scoreSizing', 'Positiegrootte op basis van score', 'bool'],
+    ['maxTradeCost', 'Max. kosten round-trip (%)'],
+    ['maxPump5m', 'Pump-filter: max. stijging 5m (%)'], ['maxPump1h', 'Pump-filter: max. stijging 1u (%)'],
+    ['dipPct', 'Na pump: wacht op terugval (%)'], ['dipWaitMin', 'Na pump: max. wachten (min) · 0 = uit'],
+    ['dailyLossPct', 'Daglimiet verlies (% van start) · 0 = uit'],
+    ['maxLossStreak', 'Pauze na X verliezen op rij · 0 = uit'], ['cooldownMin', 'Pauze duur (min)'],
+    ['noRebuy', 'Nooit dezelfde coin opnieuw kopen', 'bool'],
   ],
 };
 
@@ -160,7 +171,7 @@ function renderKpis() {
     ['📈', 'Gerealiseerd', `<span class="${s.realized >= 0 ? 'pos' : 'neg'}">${s.realized >= 0 ? '+' : ''}${s.realized.toFixed(4)} ◎</span>`, `${s.trades} trades`],
     ['🎯', 'Win rate', s.trades ? `${Math.round(s.winRate)}%` : '—', `${paper.history.filter((t) => t.pnlSol > 0).length} gewonnen`],
     ['📂', 'Open posities', `${paper.positions.length}/${settings.paper.maxPos}`, sol(s.open, 3)],
-    ['◎', 'SOL prijs', s.solUsd ? `$${s.solUsd.toFixed(2)}` : '—', 'Jupiter'],
+    s.paused ? ['⏸', 'Status', 'gepauzeerd', esc(s.paused), 'warn'] : ['▶', 'Status', 'kopen actief', `${trader.waiting.size} wacht op terugval`, 'good'],
   ]);
   const recs = tracker.list(), a = agg(recs);
   setKpis('[data-kpis-analyse]', [
@@ -266,7 +277,8 @@ function renderFlow() {
   const pts = [...paper.equityHist.slice(-120), { t: Date.now(), v: s.equity }];
   const paperDetail = sparkline(pts)
     + chips([['saldo', s.balance.toFixed(2) + '◎'], ['open', `${paper.positions.length}/${settings.paper.maxPos}`], ['win', s.trades ? Math.round(s.winRate) + '%' : '—']])
-    + miniList(paper.positions.slice(0, 3).map((p) => [esc(p.symbol), pct(p.pnlPct)]), 'geen open posities');
+    + (s.paused ? `<div class="fb-feed">⏸ ${esc(s.paused)}</div>` : '')
+    + miniList(paper.positions.slice(0, 3).map((p) => [`${p.partialDone ? '🟡 ' : ''}${esc(p.symbol)}`, pct(p.pnlPct)]), 'geen open posities');
 
   // analyse
   const recs = tracker.list();
@@ -427,7 +439,9 @@ function renderPaper() {
   const sig = trader.signals.filter((t) => !pos.some((p) => p.mint === t.mint));
   const span = s.tp + s.sl;
   const at = (v) => Math.max(0, Math.min(100, ((v + s.sl) / span) * 100));
+  const paused = trader.riskBlock();
   $('[data-bot="paper"] [data-body]').innerHTML = `
+    ${paused ? `<div class="insight warn">⏸ Kopen gepauzeerd: ${esc(paused)}. Open posities worden wel gewoon beheerd.</div>` : ''}
     <div class="sectionlbl">Open posities · ${pos.length}/${s.maxPos}</div>
     ${pos.length ? `<div class="tgrid wide">${pos.map((p) => `
       <div class="tcard pcard ${p.pnlPct >= 0 ? 'ok' : 'bad'}">
@@ -436,9 +450,15 @@ function renderPaper() {
           <div class="range-track"><i class="zero" style="left:${at(0)}%"></i><i class="peak" style="left:${at(p.peakPct)}%" title="piek"></i><i class="now ${p.pnlPct >= 0 ? 'up' : 'down'}" style="left:${at(p.pnlPct)}%"></i></div>
           <div class="range-lbl"><span>SL −${s.sl}%</span><span>0</span><span>TP +${s.tp}%</span></div>
         </div>
-        <div class="tc-chips">${chip(`in ${sol(p.entrySol)}`)}${chip(`nu ${sol(p.lastValueSol)}`)}${chip(`piek ${p.peakPct >= 0 ? '+' : ''}${p.peakPct.toFixed(1)}%`)}${chip(`⏱ ${ago(Date.now() - p.entryTs)}`)}</div>
+        <div class="tc-chips">${chip(`in ${sol(p.entrySol)}`)}${chip(`nu ${sol(p.lastValueSol)}`)}${chip(`piek ${p.peakPct >= 0 ? '+' : ''}${p.peakPct.toFixed(1)}%`)}${chip(`⏱ ${ago(Date.now() - p.entryTs)}`)}
+          ${p.partialDone ? chip(`🟡 deel verkocht +${(p.realizedSol || 0).toFixed(3)}◎`, 'gold') : ''}
+          ${s.beAct > 0 && p.peakPct >= s.beAct ? chip('🛡 break-even stop actief', 'good') : ''}
+          ${p.sizeFactor && p.sizeFactor !== 1 ? chip(`${p.sizeFactor.toFixed(2)}× grootte`) : ''}
+          ${p.m5 ? chip(`5m ${p.m5.buys}B/${p.m5.sells}S`, p.m5.sells > p.m5.buys * 1.5 ? 'bad' : '') : ''}</div>
         <div class="tc-foot"><a href="${dexUrl(p.mint)}" target="_blank" rel="noopener" class="mint">DexScreener ↗</a><button class="btn small" data-close="${esc(p.id)}">Verkoop</button></div>
       </div>`).join('')}</div>` : '<div class="empty big">📂 Geen open posities.</div>'}
+    ${trader.waiting.size ? `<div class="sectionlbl">Wacht op terugval na pump · ${trader.waiting.size}</div>
+    <div class="queue">${[...trader.waiting.values()].map((w) => `<span class="qchip click" data-mint="${esc(w.t.mint)}">${avatar(w.t.symbol, w.t.mint)}${esc(w.t.symbol)} <span class="mint">${w.high && w.last ? `${((w.last / w.high - 1) * 100).toFixed(0)}% van top` : ''} · nog ${ago(Math.max(0, w.since + s.dipWaitMin * 60000 - Date.now()))}</span></span>`).join('')}</div>` : ''}
     <div class="sectionlbl">Signalen (bevestigd, niet gekocht)</div>
     ${sig.length ? `<div class="queue">${sig.map((t) => `<span class="qchip">${avatar(t.symbol, t.mint)}<b class="click" data-mint="${esc(t.mint)}">${esc(t.symbol)}</b> <span class="mint">score ${t.rank}</span><button class="btn small primary" data-buy="${esc(t.mint)}">Buy ${s.sizeSol} ◎</button></span>`).join('')}</div>`
       : `<div class="mint">${s.autoTrade ? 'Auto-trade aan: bevestigde coins worden direct gekocht zolang de trader draait.' : 'Nog geen signalen.'}</div>`}`;
@@ -468,7 +488,7 @@ function render() {
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
     const an = $('#analyse');
-    if (an.offsetParent !== null) renderAnalyse(an, tracker);
+    if (an.offsetParent !== null) renderAnalyse(an, tracker, paper.history);
     $('[data-cnt="analyse"]').textContent = Object.keys(tracker.records).length || '';
   });
 }
@@ -521,7 +541,7 @@ function showDetail(mint) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile],[data-apply-exit]');
   if (!el) return;
   const card = el.closest('[data-bot],[data-mini]');
   if (el.hasAttribute('data-clear-log')) {
@@ -545,6 +565,13 @@ document.addEventListener('click', async (e) => {
     security.addManual(el.dataset.check).catch((err) => log('security', err.message, 'err'));
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
+  } else if (el.dataset.applyExit) {
+    const cfg = JSON.parse(el.dataset.applyExit);
+    Object.assign(settings.paper, cfg);
+    saveSettings();
+    buildForms();
+    log('paper', `Exit-instellingen uit optimizer toegepast: TP +${cfg.tp}%, SL −${cfg.sl}%, trailing ${cfg.trailAct ? `${cfg.trail}% na +${cfg.trailAct}%` : 'uit'}, deelverkoop ${cfg.partialTp ? `+${cfg.partialTp}%` : 'uit'}`, 'ok');
+    render();
   } else if (el.dataset.profile) {
     applyProfile(el.dataset.profile);
     buildForms();

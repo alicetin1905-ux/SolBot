@@ -16,9 +16,15 @@ export const DEFAULTS = {
     minBuySell: 1.05, minScore: 60,
   },
   paper: {
-    startSol: 10, sizeSol: 0.5, maxPos: 5, tp: 50, sl: 20, trailAct: 20, trail: 12,
+    startSol: 10, sizeSol: 0.5, maxPos: 5, tp: 100, sl: 20, trailAct: 20, trail: 12,
     maxHoldMin: 180, slippageBps: 300, feeSol: 0.0005, exitTickSec: 3, autoTrade: true,
     maxLiqPct: 2, minSizeSol: 0.05,
+    // smarter exits
+    partialTp: 25, partialSell: 50, beAct: 15, staleMin: 20, staleBand: 5, sellPressure: 2.5,
+    // smarter entries
+    scoreSizing: true, maxTradeCost: 6, maxPump5m: 50, maxPump1h: 300, dipPct: 15, dipWaitMin: 10,
+    // risk rules
+    dailyLossPct: 15, maxLossStreak: 3, cooldownMin: 30, noRebuy: true,
   },
 };
 
@@ -100,6 +106,11 @@ export function freshPaper() {
 }
 export const paper = Object.assign(freshPaper(), load(KEY_PAPER, {}));
 export const savePaper = () => save(KEY_PAPER, paper);
+// Positions saved by older versions lack the partial-sell fields.
+for (const p of paper.positions || []) {
+  if (p.realizedSol == null) p.realizedSol = 0;
+  if (p.partialDone == null) p.partialDone = false;
+}
 
 /** Every token that enters the pipeline, keyed by mint. */
 export const tokens = new Map();

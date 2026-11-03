@@ -8,7 +8,7 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 | 1 | **Sniper** | Live feed via PumpPortal: elke nieuwe Pump.fun launch en elke migratie naar PumpSwap, direct bij creatie. Daarnaast DexScreener (profielen, boosts, community takeovers) en GeckoTerminal (nieuwe + trending pools op alle DEXen en launchpads). Scoort elke coin op liquiditeit, volume/liquiditeit, buy/sell ratio, momentum, leeftijd, transacties en socials. |
 | 2 | **Security check** | Jupiter audit (organic score tegen wash trading, verdacht-vlag; en fallback als RugCheck niet werkt) + RugCheck rapport: mint authority, freeze authority, gerugd, gevaarlijke Token-2022 extensies, transfer tax, LP locked/burned %, top 10 holders, grootste holder, insider netwerken, aantal holders, RugCheck risico's. **Honeypot test**: simuleert een koop én verkoop via Jupiter en meet het round-trip verlies. |
 | 3 | **Real check** | Observeert goedgekeurde coins meerdere rondes: blijft de liquiditeit staan, gaat de prijs niet onderuit, blijven kopers komen, klopt de DexScreener prijs met Jupiter, en is de coin nog steeds verkoopbaar. Geeft een totaalscore. |
-| 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL, op basis van echte Jupiter quotes (inclusief price impact en tax). Exits worden elke 3 sec gecheckt via Jupiter prijzen. Max. positie = 2% van de pool. Take profit, stop loss, trailing stop, max houdtijd en rug-alarm (liquiditeit -50%). |
+| 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL op echte Jupiter quotes. **Kopen:** grootte op basis van totaalscore, max. 2% van de pool, max. round-trip kosten, na een pump eerst wachten op een terugval. **Verkopen:** stop loss, break-even stop, deelverkoop, take profit, trailing stop, verkoopdruk, dode coin, max houdtijd, rug-alarm (elke 3 sec). **Risico:** daglimiet, pauze na verliesreeks, nooit dezelfde coin opnieuw. |
 
 ## Profielen
 Bovenaan wissel je met één klik tussen **🛡️ Voorzichtig** (strenge filters), **⚖️ Normaal** en **🔥 Agressief**
@@ -23,7 +23,7 @@ vergelijkt per profiel hoeveel winnaars en rugs er doorkwamen.
 | 2 · Security | `#/security` | Wachtrij, alle checks per token, handmatig token checken, security log |
 | 3 · Real check | `#/real` | Coins in observatie, resultaten met scores, real check log |
 | 4 · Paper trader | `#/paper` | Saldo, open posities, signalen, equity grafiek, trade historie, paper log |
-| 🔬 Analyse | `#/analyse` | Volgt élke gescande coin (ook afgekeurde) 5m–6u lang en meet winnaars/rugs per uitkomst, afkeur-reden, exchange, bron en score. Met automatische inzichten en CSV-export |
+| 🔬 Analyse | `#/analyse` | Volgt élke gescande coin (ook afgekeurde) 5m–6u lang en meet winnaars/rugs per uitkomst, afkeur-reden, exchange, bron en score. Met automatische inzichten, trade-analyse (per verkoopreden, score, bron, profiel, exchange), een **exit-optimizer** die het echte prijsverloop van bevestigde coins opnieuw afspeelt met andere TP/SL/trailing-instellingen, en CSV-export |
 
 Alles is één app: de bots blijven draaien als je van pagina wisselt.
 
