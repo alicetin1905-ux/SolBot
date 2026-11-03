@@ -26,6 +26,10 @@ Je data staat in `~/SolBot-data`. Aan het eind toont Terminal de adressen en een
 - **Pushmeldingen:** tik in het dashboard op 🔕 en volg de stappen (gratis app *ntfy*).
 - **Data meenemen:** 💾 Backup op de Analyse-pagina van de oude versie, en ♻️ Backup terugzetten op de Mac.
 
+**Buitenshuis (Tailscale):** installeer Tailscale op de Mac en iPhone (zelfde account), en draai op de Mac eenmalig
+`/Applications/Tailscale.app/Contents/MacOS/Tailscale serve --bg <poort>` (de poort uit de installatie, bijv. 8788).
+Daarna is SolBot overal bereikbaar via `https://<mac-naam>.<tailnet>.ts.net/` zolang Tailscale op je iPhone aan staat.
+
 Het dashboard ziet zelf of het van de Mac komt (groene badge met de naam van je Mac): dan draaien de bots op de Mac
 en sturen alle knoppen hun opdracht naar de Mac. De GitHub Pages-versie blijft gewoon werken in de browser.
 
