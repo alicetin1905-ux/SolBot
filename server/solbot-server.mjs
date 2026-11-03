@@ -175,6 +175,22 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+// If the port is taken (e.g. by another bot or app), use the next free one and remember it,
+// so the address stays the same after restarts.
+let tries = 0;
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE' && tries < 20) {
+    say(`⚠️ Poort ${config.port} is al in gebruik door een ander programma, probeer ${config.port + 1}…`);
+    tries++;
+    config.port++;
+    setTimeout(() => server.listen(config.port, '0.0.0.0'), 200);
+  } else {
+    say(`❌ Server kon niet starten: ${e.message}`);
+    flush();
+    process.exit(1);
+  }
+});
+server.on('listening', () => writeJSON(CONFIG_FILE, config));
 server.listen(config.port, '0.0.0.0', () => {
   const ips = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   say('──────────────────────────────────────────────');

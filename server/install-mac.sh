@@ -69,16 +69,18 @@ sleep 1
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 say "4/4  Starten…"
-for i in $(seq 1 20); do
-  [ -f "$DATA/config.json" ] && curl -fs "http://localhost:8787/api/hello" >/dev/null 2>&1 && break
+PORT=8787
+for i in $(seq 1 30); do
+  # the server picks the next free port if 8787 is taken by another program
+  PORT="$("$NODE" -p "require('$DATA/config.json').port" 2>/dev/null || echo 8787)"
+  curl -fs "http://localhost:$PORT/api/hello" 2>/dev/null | grep -q '"solbot":true' && break
   sleep 1
 done
-PORT="$("$NODE" -p "require('$DATA/config.json').port" 2>/dev/null || echo 8787)"
 CODE="$("$NODE" -p "require('$DATA/config.json').key" 2>/dev/null || echo '?')"
 HOST="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
 IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || echo '')"
 
-if curl -fs "http://localhost:$PORT/api/hello" >/dev/null 2>&1; then
+if curl -fs "http://localhost:$PORT/api/hello" 2>/dev/null | grep -q '"solbot":true'; then
   say "✅ SolBot draait 24/7 op deze Mac"
   echo "   Op deze Mac:      http://localhost:$PORT"
   echo "   Thuis op iPhone:  http://$HOST.local:$PORT${IP:+    (of http://$IP:$PORT)}"
@@ -87,6 +89,7 @@ if curl -fs "http://localhost:$PORT/api/hello" >/dev/null 2>&1; then
   echo "   Log bekijken:     tail -f $DATA/server.log"
   echo "   Updaten:          plak hetzelfde installatiecommando opnieuw"
   echo "   Stoppen:          launchctl bootout gui/\$(id -u)/$LABEL"
+  [ "$PORT" != "8787" ] && echo "   (Poort 8787 was al bezet door een ander programma, daarom poort $PORT.)"
   open "http://localhost:$PORT" 2>/dev/null || true
 else
   say "⚠️ De server reageert nog niet. Laatste regels uit het log:"
