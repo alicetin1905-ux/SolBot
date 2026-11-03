@@ -1,9 +1,9 @@
 // Analyse page: turns tracker records into "do my filters work?" answers.
-import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261103190516';
-import { exchangeOf } from './flow.js?v=20261103190516';
-import { exitKind } from './paper.js?v=20261103190516';
-import { settings } from './store.js?v=20261103190516';
-import { getModel, FEATURES, labeled, MIN_SAMPLES } from './model.js?v=20261103190516';
+import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261103190705';
+import { exchangeOf } from './flow.js?v=20261103190705';
+import { exitKind } from './paper.js?v=20261103190705';
+import { settings } from './store.js?v=20261103190705';
+import { getModel, FEATURES, labeled, MIN_SAMPLES } from './model.js?v=20261103190705';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const median = (a) => {

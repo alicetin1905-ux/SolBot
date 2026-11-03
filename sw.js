@@ -1,7 +1,7 @@
 // SolBot service worker: makes the home-screen app open without network and shows
 // notifications. Network-first for our own files (so updates are never stale);
 // API calls to other sites are never cached.
-const CACHE = 'solbot-shell-v1';
+const CACHE = 'solbot-shell-v2'; // bump to refresh cached icons
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/apple-touch-icon.png', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {

@@ -1,13 +1,13 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103190516';
-import { SniperBot, fmt } from './sniper.js?v=20261103190516';
-import { SecurityBot } from './security.js?v=20261103190516';
-import { RealCheckBot } from './realcheck.js?v=20261103190516';
-import { PaperBot } from './paper.js?v=20261103190516';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103190516';
-import { TrackerBot } from './metingen.js?v=20261103190516';
-import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261103190516';
-import { train, setModel, getModel } from './model.js?v=20261103190516';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103190516';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103190705';
+import { SniperBot, fmt } from './sniper.js?v=20261103190705';
+import { SecurityBot } from './security.js?v=20261103190705';
+import { RealCheckBot } from './realcheck.js?v=20261103190705';
+import { PaperBot } from './paper.js?v=20261103190705';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103190705';
+import { TrackerBot } from './metingen.js?v=20261103190705';
+import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261103190705';
+import { train, setModel, getModel } from './model.js?v=20261103190705';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103190705';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();

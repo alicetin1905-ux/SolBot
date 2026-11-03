@@ -42,9 +42,10 @@ h1, h2 { margin: 0; }
 }
 .brand { display: flex; align-items: center; gap: 12px; }
 .logo {
-  width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 22px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff;
+  width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; flex: none;
+  background: linear-gradient(180deg, #1c0e14, #08090e); box-shadow: inset 0 0 0 1px rgba(255, 82, 82, .25), 0 0 18px -6px rgba(230, 30, 50, .7);
 }
+.logo svg { width: 24px; height: 21px; filter: drop-shadow(0 0 4px rgba(230, 30, 50, .6)); }
 .brand h1 { font-size: 20px; letter-spacing: .3px; }
 .sub { margin: 0; color: var(--muted); font-size: 12px; }
 .badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px; letter-spacing: .5px; }
