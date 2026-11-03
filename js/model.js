@@ -1,7 +1,7 @@
 // Learned score: a small logistic-regression model trained in the browser on the
 // tracker's measured coins. It predicts the chance that a coin becomes a winner
 // (ever >= +50% after first seen) without rugging, from the sniper's features.
-import { WIN_PCT } from './metingen.js?v=20261103104710';
+import { WIN_PCT } from './metingen.js?v=20261103190516';
 
 const KEY = 'solbot.model.v1';
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));

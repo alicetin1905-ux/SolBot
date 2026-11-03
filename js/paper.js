@@ -1,7 +1,7 @@
-import { Bot } from './bot.js?v=20261103104710';
-import * as api from './api.js?v=20261103104710';
-import { devBalance } from './dev.js?v=20261103104710';
-import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, currentProfile } from './store.js?v=20261103104710';
+import { Bot } from './bot.js?v=20261103190516';
+import * as api from './api.js?v=20261103190516';
+import { devBalance } from './dev.js?v=20261103190516';
+import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, currentProfile } from './store.js?v=20261103190516';
 
 /**
  * Paper trader: simulates trades with fake SOL, but uses real Jupiter quotes

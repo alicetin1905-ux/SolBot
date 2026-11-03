@@ -1,12 +1,13 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103104710';
-import { SniperBot, fmt } from './sniper.js?v=20261103104710';
-import { SecurityBot } from './security.js?v=20261103104710';
-import { RealCheckBot } from './realcheck.js?v=20261103104710';
-import { PaperBot } from './paper.js?v=20261103104710';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103104710';
-import { TrackerBot } from './metingen.js?v=20261103104710';
-import { train, setModel, getModel } from './model.js?v=20261103104710';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103104710';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103190516';
+import { SniperBot, fmt } from './sniper.js?v=20261103190516';
+import { SecurityBot } from './security.js?v=20261103190516';
+import { RealCheckBot } from './realcheck.js?v=20261103190516';
+import { PaperBot } from './paper.js?v=20261103190516';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103190516';
+import { TrackerBot } from './metingen.js?v=20261103190516';
+import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261103190516';
+import { train, setModel, getModel } from './model.js?v=20261103190516';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103190516';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -191,6 +192,14 @@ function renderKpis() {
 }
 
 const confirmedCount = () => real.done.filter((t) => t.real && t.stage !== 'rejected').length;
+
+function renderNotifyBtn() {
+  const st = notifyState();
+  const btn = $('#notifyBtn');
+  btn.textContent = st === 'on' ? '🔔' : '🔕';
+  btn.classList.toggle('on', st === 'on');
+  btn.title = { on: 'Meldingen staan aan (tik om uit te zetten)', off: 'Meldingen aanzetten', denied: 'Meldingen geblokkeerd in iOS-instellingen', install: 'Meldingen: zet SolBot eerst op je beginscherm', unsupported: 'Meldingen niet ondersteund' }[st];
+}
 
 function renderBotHead(id) {
   const b = bots[id];
@@ -491,7 +500,8 @@ function render() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderKpis(); renderFlow(); renderProfiles();
+    renderKpis(); renderFlow(); renderProfiles(); renderNotifyBtn();
+    keepAwake(Object.values(bots).some((b) => b.running)); // screen stays on while bots run
     Object.keys(bots).forEach(renderBotHead);
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
@@ -625,6 +635,7 @@ const RUN_KEY = 'solbot.running.v1';
 function persistRunning() {
   try { localStorage.setItem(RUN_KEY, JSON.stringify(Object.keys(bots).filter((k) => bots[k].running))); } catch { /* ignore */ }
 }
+$('#notifyBtn').onclick = async () => { await toggleNotify(); render(); };
 $('#startAll').onclick = () => { Object.values(bots).forEach((b) => b.start()); persistRunning(); };
 $('#stopAll').onclick = () => { Object.values(bots).forEach((b) => b.running && b.stop()); persistRunning(); };
 $('#resetPaper').onclick = () => { if (confirm('Paper account resetten? Alle posities en historie worden gewist.')) trader.reset(); };
@@ -674,6 +685,7 @@ setInterval(() => trainModel(false), 60 * 60000);
 setTimeout(() => { if (!getModel()) trainModel(false); }, 15000);
 
 // ---------- boot ----------
+initPWA();
 initFlow($('#flow'));
 tracker.start();
 window.__solbotStarted = true;

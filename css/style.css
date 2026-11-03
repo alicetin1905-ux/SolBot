@@ -595,3 +595,25 @@ table.nice tr.cur td { background: color-mix(in srgb, var(--accent) 8%, transpar
 .imp-bar i { position: absolute; top: 0; bottom: 0; border-radius: 99px; }
 .imp-bar i.up { background: var(--ok); } .imp-bar i.down { background: var(--err); }
 @media (max-width: 600px) { .imp li { grid-template-columns: 110px minmax(0, 1fr); } }
+
+/* ================= home-screen app (iPhone) ================= */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-tap-highlight-color: transparent; }
+.top { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+.tabs { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+.boot-error { bottom: calc(16px + env(safe-area-inset-bottom)); }
+html.standalone .btn, html.standalone .tabs a, html.standalone .pchip { -webkit-user-select: none; user-select: none; }
+#notifyBtn.on { border-color: var(--ok); }
+
+.install-hint {
+  position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 40;
+  display: flex; gap: 12px; align-items: center; padding: 12px; border-radius: 16px;
+  background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 12px 30px rgba(0,0,0,.45);
+  animation: ih-in .4s ease-out;
+}
+.install-hint .ih-icon img { width: 44px; height: 44px; border-radius: 11px; display: block; }
+.install-hint div { display: grid; gap: 2px; font-size: 13px; flex: 1; min-width: 0; }
+.install-hint div > span { color: var(--muted); }
+.install-hint .ih-share { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); font-size: 12px; }
+@keyframes ih-in { from { transform: translateY(20px); opacity: 0; } }

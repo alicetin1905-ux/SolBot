@@ -10,6 +10,15 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 | 3 | **Real check** | Observeert goedgekeurde coins meerdere rondes: blijft de liquiditeit staan, gaat de prijs niet onderuit, blijven kopers komen, klopt de DexScreener prijs met Jupiter, en is de coin nog steeds verkoopbaar. Geeft een totaalscore. |
 | 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL op echte Jupiter quotes. **Kopen:** grootte op basis van totaalscore, max. 2% van de pool, max. round-trip kosten, na een pump eerst wachten op een terugval. **Verkopen:** stop loss, break-even stop, deelverkoop, take profit, trailing stop, verkoopdruk, dode coin, max houdtijd, rug-alarm (elke 3 sec). **Risico:** daglimiet, pauze na verliesreeks, nooit dezelfde coin opnieuw. Verkoopt direct als de dev dumpt. **Realistisch:** vertraging per transactie, kans op mislukte transacties en slippage-checks, met fees ook bij mislukte pogingen. |
 
+## Op je iPhone als app
+1. Open **https://alicetin1905-ux.github.io/SolBot/** in **Safari**.
+2. Tik op **Deel** (vierkantje met pijl omhoog) → **Zet op beginscherm** → **Voeg toe**.
+3. Open SolBot via het nieuwe icoon: fullscreen, zonder adresbalk.
+4. Tik in de app op **🔕** om meldingen aan te zetten (iOS 16.4 of nieuwer).
+
+Zolang de bots draaien blijft het scherm aan. Let op: als je de iPhone vergrendelt of naar een andere app gaat,
+pauzeert iOS de app en stoppen de bots. Voor 24/7 draaien komt de Mac-server.
+
 ## Profielen
 Bovenaan wissel je met één klik tussen **🛡️ Voorzichtig** (strenge filters), **⚖️ Normaal** en **🔥 Agressief**
 (zoveel mogelijk coins, meer risico). Pas je zelf iets aan, dan staat er **✏️ Aangepast**. De Analyse-pagina
