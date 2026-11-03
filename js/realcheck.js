@@ -1,6 +1,7 @@
-import { Bot } from './bot.js?v=20261103000915';
-import * as api from './api.js?v=20261103000915';
-import { settings, upsertToken, emit, log } from './store.js?v=20261103000915';
+import { Bot } from './bot.js?v=20261103104710';
+import * as api from './api.js?v=20261103104710';
+import { devBalance } from './dev.js?v=20261103104710';
+import { settings, upsertToken, emit, log } from './store.js?v=20261103104710';
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 
@@ -20,7 +21,10 @@ export class RealCheckBot extends Bot {
 
   add(t) {
     if (this.watch.some((w) => w.mint === t.mint)) return;
-    this.watch.push({ mint: t.mint, symbol: t.symbol, snaps: [], startedAt: Date.now(), next: 0 });
+    this.watch.push({
+      mint: t.mint, symbol: t.symbol, snaps: [], startedAt: Date.now(), next: 0,
+      dev: t.dev, devStart: t.devAtCheck?.bal, devHoldPct: t.devAtCheck?.holdPct,
+    });
     upsertToken(t.mint, { stage: 'watching' });
     log(this.id, `👀 ${t.symbol} op watchlist (${settings.real.rounds} rondes)`);
     this.changed();
@@ -95,6 +99,16 @@ export class RealCheckBot extends Bot {
 
     const volTrend = first.volH1 ? last.volH1 / first.volH1 : 1;
     add('Volume trend 1u', volTrend < 0.6 ? 'warn' : 'pass', `${((volTrend - 1) * 100).toFixed(0)}%`);
+
+    // Did the dev sell while we were watching? (only meaningful if the dev held a real bag)
+    if (w.dev && w.devStart > 0 && (w.devHoldPct ?? 0) >= 0.5) {
+      const bal = await devBalance(w.dev, w.mint, 0);
+      if (bal != null) {
+        const sold = Math.max(0, (1 - bal / w.devStart) * 100);
+        add('Dev blijft zitten', sold >= 20 ? 'fail' : sold > 0 ? 'warn' : 'pass',
+          sold > 0 ? `dev verkocht ${sold.toFixed(0)}% tijdens observatie` : 'dev heeft niets verkocht');
+      }
+    }
 
     // Re-verify sellability right before handing over to the trader.
     try {

@@ -1,6 +1,7 @@
-import { Bot } from './bot.js?v=20261103000915';
-import * as api from './api.js?v=20261103000915';
-import { settings, upsertToken, tokens, emit, log } from './store.js?v=20261103000915';
+import { Bot } from './bot.js?v=20261103104710';
+import * as api from './api.js?v=20261103104710';
+import { devBalance, pctOf } from './dev.js?v=20261103104710';
+import { settings, upsertToken, tokens, emit, log } from './store.js?v=20261103104710';
 
 const LAMPORTS = 1e9;
 
@@ -53,7 +54,7 @@ export class SecurityBot extends Bot {
     log(this.id, `🔍 Check ${t.symbol || t.mint.slice(0, 6)}…`);
     let result;
     try {
-      result = await this.audit(t.mint, t.attempts || 0);
+      result = await this.audit(t.mint, t.attempts || 0, t);
     } catch (e) {
       if (!(e instanceof RetryLater)) throw e;
       t.attempts = (t.attempts || 0) + 1;
@@ -69,7 +70,8 @@ export class SecurityBot extends Bot {
     }
     const passed = result.checks.every((c) => c.status !== 'fail');
     const tok = upsertToken(t.mint, {
-      security: result, decimals: result.decimals,
+      security: result, decimals: result.decimals, devAtCheck: result.dev,
+      dev: t.dev || result.dev?.dev,
       symbol: t.symbol || result.symbol, name: t.name || result.name,
       stage: passed ? 'watch-queue' : 'rejected',
       rejectReason: passed ? null : result.checks.filter((c) => c.status === 'fail').map((c) => c.name).join(', '),
@@ -87,7 +89,7 @@ export class SecurityBot extends Bot {
     emit('security:done', tok);
   }
 
-  async audit(mint, attempts = 0) {
+  async audit(mint, attempts = 0, t = {}) {
     const s = settings.security;
     const checks = [];
     const add = (name, status, detail) => checks.push({ name, status, detail });
@@ -146,6 +148,15 @@ export class SecurityBot extends Bot {
         }
         const lp = w ? sum / w : 0;
         add('LP locked/burned', lp >= s.minLpLocked ? 'pass' : 'fail', `${lp.toFixed(1)}%`);
+        // Locked (not burned) LP: when does the lock end? An unlock soon means the LP can be pulled.
+        const unlocks = Object.values(r.lockers || {})
+          .map((l) => Number(l.unlockDate || l.unlock_date || l.unlockAt || 0))
+          .filter((x) => x > 0).map((x) => (x < 1e12 ? x * 1000 : x));
+        if (unlocks.length) {
+          const days = (Math.min(...unlocks) - Date.now()) / 864e5;
+          add('LP lock loopt af', days < 1 ? 'fail' : days < s.lpUnlockDays ? 'warn' : 'pass',
+            days < 0 ? 'lock is al verlopen' : `over ${days < 2 ? `${Math.round(days * 24)} uur` : `${Math.round(days)} dagen`}`);
+        }
       } else {
         add('LP locked/burned', 'warn', 'geen AMM pool (bonding curve / onbekend)');
       }
@@ -178,6 +189,30 @@ export class SecurityBot extends Bot {
       }
     }
 
+    // ---- Dev (creator) wallet: how much does it still hold, how much did it already dump? ----
+    const dev = t.dev || j?.dev || r?.creator;
+    const supply = Number(j?.totalSupply) || (r?.token?.supply ? Number(r.token.supply) / 10 ** (r.token.decimals ?? 6) : 0);
+    let devInfo = null;
+    if (dev) {
+      const bal = await devBalance(dev, mint, 0);
+      if (bal != null) {
+        const holdPct = pctOf(bal, supply);
+        const soldPct = t.devInitial > 0 ? Math.max(0, (1 - bal / t.devInitial) * 100) : null;
+        devInfo = { dev, bal, holdPct, soldPct, at: Date.now() };
+        if (holdPct != null) {
+          add('Dev bezit', holdPct > s.maxDevHold ? 'fail' : holdPct > s.maxDevHold / 2 ? 'warn' : 'pass',
+            `${holdPct.toFixed(2)}% van supply${holdPct > s.maxDevHold ? ': kan op je dumpen' : ''}`);
+        }
+        if (soldPct != null) {
+          const failSold = s.devSoldFail > 0 && soldPct >= s.devSoldFail;
+          add('Dev verkocht', failSold ? 'fail' : soldPct >= 50 ? 'warn' : 'pass',
+            `${soldPct.toFixed(0)}% van zijn launch-aankoop verkocht`);
+        }
+      }
+      const mints = j?.audit?.devMints;
+      if (mints != null) add('Dev geschiedenis', mints > s.maxDevMints ? 'fail' : mints > s.maxDevMints / 2 ? 'warn' : 'pass', `dev heeft ${mints} token(s) gemaakt${mints > s.maxDevMints ? ' (serie-launcher)' : ''}`);
+    }
+
     // ---- Honeypot simulation via Jupiter: buy then sell ----
     const inLamports = Math.round(s.testSol * LAMPORTS);
     let roundTrip = null;
@@ -203,7 +238,7 @@ export class SecurityBot extends Bot {
     const fails = checks.filter((c) => c.status === 'fail').length;
     const warns = checks.filter((c) => c.status === 'warn').length;
     const score = Math.max(0, 100 - fails * 25 - warns * 7);
-    return { checks, score, roundTrip, decimals, symbol, name, at: Date.now() };
+    return { checks, score, roundTrip, decimals, symbol, name, at: Date.now(), dev: devInfo };
   }
 
   /** Core checks from Jupiter's token audit, used when RugCheck is unavailable. */
@@ -219,7 +254,6 @@ export class SecurityBot extends Bot {
     }
     const nh = j.holderCount || 0;
     add('Aantal holders', nh >= s.minHolders ? 'pass' : 'warn', `${nh}`);
-    if ((a.devMints || 0) > 20) add('Dev geschiedenis', 'warn', `dev heeft al ${a.devMints} tokens gemaakt`);
   }
 
   /** Extra signals Jupiter has that RugCheck doesn't: wash trading and "suspicious" flag. */

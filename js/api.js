@@ -130,6 +130,9 @@ export async function jupToken(mint) {
   return (Array.isArray(res) ? res : []).find((t) => t.id === mint) || null;
 }
 
+/** All token balances of a wallet (used to watch what a token's dev is doing). */
+export const jupHoldings = (wallet) => limits.jup(() => getJSON(`${JUP}/ultra/v1/holdings/${wallet}`));
+
 export async function jupPrices(mints) {
   const out = {};
   const uniq = [...new Set(mints)];

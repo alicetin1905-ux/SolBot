@@ -1,4 +1,4 @@
-import { emit, log } from './store.js?v=20261103000915';
+import { emit, log } from './store.js?v=20261103104710';
 
 /** Base class: a bot runs `tick()` on an interval while it is started. */
 export class Bot {

@@ -5,11 +5,12 @@ export const DEFAULTS = {
     intervalSec: 60, minLiq: 10000, minVolH1: 3000, minMcap: 20000, maxMcap: 5000000,
     maxAgeH: 72, minBuySell: 1.0, minScore: 55, useGecko: true,
     useLaunches: true, useMigrations: true, launchMinAgeMin: 2, launchMaxAgeMin: 30, curveMinMcap: 12000,
-    youngMinScore: 50,
+    youngMinScore: 50, useModel: false, minProb: 10,
   },
   security: {
     maxTop10: 35, maxSingleHolder: 15, minLpLocked: 80, maxRiskScore: 50, minHolders: 100,
     maxRoundTrip: 10, testSol: 0.1, maxTransferFee: 0, maxInsiders: 30, minOrganic: 15, strictDanger: true,
+    maxDevHold: 10, devSoldFail: 0, maxDevMints: 50, lpUnlockDays: 7,
   },
   real: {
     rounds: 4, intervalSec: 45, maxLiqDrop: 15, minPriceChange: -8, maxPriceDev: 6,
@@ -17,7 +18,7 @@ export const DEFAULTS = {
   },
   paper: {
     startSol: 10, sizeSol: 0.5, maxPos: 5, tp: 100, sl: 20, trailAct: 20, trail: 12,
-    maxHoldMin: 180, slippageBps: 300, feeSol: 0.0005, exitTickSec: 3, autoTrade: true,
+    maxHoldMin: 180, slippageBps: 1000, feeSol: 0.001, exitTickSec: 3, autoTrade: true,
     maxLiqPct: 2, minSizeSol: 0.05,
     // smarter exits
     partialTp: 25, partialSell: 50, beAct: 15, staleMin: 20, staleBand: 5, sellPressure: 2.5,
@@ -25,6 +26,8 @@ export const DEFAULTS = {
     scoreSizing: true, maxTradeCost: 6, maxPump5m: 50, maxPump1h: 300, dipPct: 15, dipWaitMin: 10,
     // risk rules
     dailyLossPct: 15, maxLossStreak: 3, cooldownMin: 30, noRebuy: true,
+    // realism + dev
+    latencyMs: 1500, failPct: 5, devExitPct: 25,
   },
 };
 
@@ -36,21 +39,21 @@ export const PROFILES = {
   voorzichtig: {
     label: '🛡️ Voorzichtig', desc: 'Strenge filters: weinig coins, minste risico',
     sniper: { minScore: 55, youngMinScore: 50, minLiq: 10000, minMcap: 20000, curveMinMcap: 12000, minVolH1: 3000, minBuySell: 1.0, launchMaxAgeMin: 30 },
-    security: { minOrganic: 15, maxTop10: 35, maxSingleHolder: 15, maxInsiders: 30, strictDanger: true, maxRiskScore: 50, minLpLocked: 80, maxRoundTrip: 10 },
+    security: { minOrganic: 15, maxTop10: 35, maxSingleHolder: 15, maxInsiders: 30, strictDanger: true, maxRiskScore: 50, minLpLocked: 80, maxRoundTrip: 10, maxDevHold: 10, maxDevMints: 50 },
     real: { rounds: 4, intervalSec: 45, minScore: 60, maxLiqDrop: 15, minPriceChange: -8 },
     paper: { sizeSol: 0.5, maxPos: 5 },
   },
   normaal: {
     label: '⚖️ Normaal', desc: 'Ruimere filters voor jonge coins, sneller bevestigen',
     sniper: { minScore: 50, youngMinScore: 42, minLiq: 7000, minMcap: 15000, curveMinMcap: 9000, minVolH1: 1500, minBuySell: 1.0, launchMaxAgeMin: 60 },
-    security: { minOrganic: 8, maxTop10: 40, maxSingleHolder: 18, maxInsiders: 40, strictDanger: false, maxRiskScore: 55, minLpLocked: 80, maxRoundTrip: 12 },
+    security: { minOrganic: 8, maxTop10: 40, maxSingleHolder: 18, maxInsiders: 40, strictDanger: false, maxRiskScore: 55, minLpLocked: 80, maxRoundTrip: 12, maxDevHold: 15, maxDevMints: 150 },
     real: { rounds: 3, intervalSec: 30, minScore: 55, maxLiqDrop: 18, minPriceChange: -10 },
     paper: { sizeSol: 0.3, maxPos: 8 },
   },
   agressief: {
     label: '🔥 Agressief', desc: 'Zoveel mogelijk coins: veel trades, veel rugs',
     sniper: { minScore: 42, youngMinScore: 35, minLiq: 5000, minMcap: 8000, curveMinMcap: 6000, minVolH1: 500, minBuySell: 0.9, launchMaxAgeMin: 90 },
-    security: { minOrganic: 0, maxTop10: 50, maxSingleHolder: 20, maxInsiders: 60, strictDanger: false, maxRiskScore: 70, minLpLocked: 70, maxRoundTrip: 15 },
+    security: { minOrganic: 0, maxTop10: 50, maxSingleHolder: 20, maxInsiders: 60, strictDanger: false, maxRiskScore: 70, minLpLocked: 70, maxRoundTrip: 15, maxDevHold: 20, maxDevMints: 500 },
     real: { rounds: 2, intervalSec: 30, minScore: 45, maxLiqDrop: 25, minPriceChange: -15 },
     paper: { sizeSol: 0.2, maxPos: 10 },
   },
@@ -100,7 +103,7 @@ export function resetSettings() {
 export function freshPaper() {
   return {
     balance: settings.paper.startSol, startSol: settings.paper.startSol,
-    positions: [], history: [], solUsd: 0,
+    positions: [], history: [], solUsd: 0, fails: { tx: 0, slip: 0, feesSol: 0 },
     equityHist: [{ t: Date.now(), v: settings.paper.startSol }],
   };
 }

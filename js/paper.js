@@ -1,6 +1,7 @@
-import { Bot } from './bot.js?v=20261103000915';
-import * as api from './api.js?v=20261103000915';
-import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, currentProfile } from './store.js?v=20261103000915';
+import { Bot } from './bot.js?v=20261103104710';
+import * as api from './api.js?v=20261103104710';
+import { devBalance } from './dev.js?v=20261103104710';
+import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, currentProfile } from './store.js?v=20261103104710';
 
 /**
  * Paper trader: simulates trades with fake SOL, but uses real Jupiter quotes
@@ -15,6 +16,7 @@ import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, current
  */
 const liqOf = (pair) => pair?.liquidity?.usd || (pair?.marketCap || pair?.fdv || 0) * 0.2;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Groups a free-text exit reason into a stable category for the analysis. */
 export function exitKind(reason = '') {
@@ -24,6 +26,7 @@ export function exitKind(reason = '') {
   if (r.startsWith('break-even')) return 'Break-even stop';
   if (r.startsWith('trailing')) return 'Trailing stop';
   if (r.startsWith('verkoopdruk')) return 'Verkoopdruk';
+  if (r.startsWith('dev verkoopt')) return 'Dev verkoopt';
   if (r.startsWith('dode coin')) return 'Dode coin';
   if (r.startsWith('max houdtijd')) return 'Max houdtijd';
   if (r.includes('rug')) return 'Rug alarm';
@@ -102,6 +105,28 @@ export class PaperBot extends Bot {
     await this.buy({ ...t, pair });
   }
 
+  /**
+   * Simulates sending a transaction: it lands after latencyMs at the price of that moment,
+   * can fail (failPct) and fails when the price moved more than the slippage tolerance.
+   * Every attempt pays the network/priority fee, also failed ones.
+   * Returns { q } on success or { failed: 'tx' | 'slip' }.
+   */
+  async land(quoteFn, decisionOut, ignoreSlip = false) {
+    const s = settings.paper;
+    if (s.latencyMs > 0) await sleep(s.latencyMs);
+    const fails = (paper.fails ||= { tx: 0, slip: 0, feesSol: 0 });
+    if (s.failPct > 0 && Math.random() * 100 < s.failPct) {
+      paper.balance -= s.feeSol; fails.tx++; fails.feesSol += s.feeSol;
+      return { failed: 'tx' };
+    }
+    const q = await quoteFn();
+    if (!ignoreSlip && decisionOut && Number(q.outAmount) < Number(decisionOut) * (1 - s.slippageBps / 10000)) {
+      paper.balance -= s.feeSol; fails.slip++; fails.feesSol += s.feeSol;
+      return { failed: 'slip', moved: (1 - Number(q.outAmount) / Number(decisionOut)) * 100 };
+    }
+    return { q };
+  }
+
   async buy(t) {
     const s = settings.paper;
     if (paper.positions.some((p) => p.mint === t.mint)) return;
@@ -132,16 +157,25 @@ export class PaperBot extends Bot {
       log(this.id, `${t.symbol} overgeslagen: te duur (direct verkopen kost ${rt.toFixed(1)}%, max ${s.maxTradeCost}%)`, 'warn');
       return;
     }
+    // Send the "transaction": latency, possible failure, slippage check against the decision quote.
+    const res = await this.land(() => api.jupQuote(api.SOL_MINT, t.mint, lamports, s.slippageBps), q.outAmount);
+    if (res.failed) {
+      log(this.id, `❌ Koop ${t.symbol} mislukt: ${res.failed === 'tx' ? 'transactie mislukt' : `prijs liep ${res.moved.toFixed(1)}% weg (slippage ${s.slippageBps / 100}%)`} · fee ${s.feeSol} SOL betaald`, 'err');
+      savePaper(); this.changed();
+      return;
+    }
+    const fill = res.q;
     const decimals = t.decimals ?? 6;
-    const ui = Number(q.outAmount) / 10 ** decimals;
+    const ui = Number(fill.outAmount) / 10 ** decimals;
     if (!ui) throw new Error('quote gaf 0 tokens');
     const cost = size + s.feeSol;
     paper.balance -= cost;
     const pos = {
       id: `${Date.now()}-${t.mint.slice(0, 4)}`, mint: t.mint, symbol: t.symbol, decimals,
-      tokensRaw: q.outAmount, entrySol: cost, entryTs: Date.now(),
+      tokensRaw: fill.outAmount, entrySol: cost, entryTs: Date.now(),
       entryPriceUsd: (size * paper.solUsd) / ui, entryLiq: liqUsd, dex: t.pair?.dexId, origin: t.origin,
-      priceImpact: Number(q.priceImpactPct || 0) * 100, entryCost: rt, sizeFactor: factor,
+      priceImpact: Number(fill.priceImpactPct || 0) * 100, entryCost: rt, sizeFactor: factor,
+      dev: t.dev, devStart: t.devAtCheck?.bal, devHoldPct: t.devAtCheck?.holdPct, devNow: t.devAtCheck?.bal, devAt: Date.now(),
       lastPriceUsd: Number(t.pair?.priceUsd) || 0, lastValueSol: size, pnlPct: 0, peakPct: 0,
       realizedSol: 0, partialDone: false, rank: t.rank, url: t.pair?.url, profile: currentProfile() || 'aangepast',
     };
@@ -165,7 +199,16 @@ export class PaperBot extends Bot {
     let outSol;
     try {
       const q = await api.jupQuote(pos.mint, api.SOL_MINT, amountRaw, s.slippageBps);
-      outSol = Number(q.outAmount) / 1e9;
+      // After 2 failed attempts a real bot raises its slippage: then accept any fill.
+      const res = await this.land(() => api.jupQuote(pos.mint, api.SOL_MINT, amountRaw, s.slippageBps), q.outAmount, (pos.sellFails || 0) >= 2);
+      if (res.failed) {
+        pos.sellFails = (pos.sellFails || 0) + 1;
+        log(this.id, `❌ Verkoop ${pos.symbol} mislukt (${res.failed === 'tx' ? 'transactie mislukt' : `prijs liep ${res.moved.toFixed(1)}% weg`}), volgende tick opnieuw · fee betaald`, 'warn');
+        savePaper();
+        return false;
+      }
+      pos.sellFails = 0;
+      outSol = Number(res.q.outAmount) / 1e9;
     } catch (e) {
       if (api.isTransient(e) || partial) { log(this.id, `Verkoop ${pos.symbol} uitgesteld (${e.message})`, 'warn'); return false; }
       // No sell route = would be stuck in real life. Book it at value minus a heavy haircut.
@@ -210,6 +253,10 @@ export class PaperBot extends Bot {
     const pnl = pos.pnlPct, peak = pos.peakPct;
     const ageMin = (Date.now() - pos.entryTs) / 60000;
     if (pnl <= -s.sl) return [`Stop loss -${s.sl}%`, 1];
+    if (s.devExitPct > 0 && pos.devStart > 0 && (pos.devHoldPct ?? 0) >= 0.5 && pos.devNow != null
+      && pos.devNow < pos.devStart * (1 - s.devExitPct / 100)) {
+      return [`Dev verkoopt (${((1 - pos.devNow / pos.devStart) * 100).toFixed(0)}% van zijn bag)`, 1];
+    }
     if (s.beAct > 0 && peak >= s.beAct && pnl <= 1) return [`Break-even stop (piek +${peak.toFixed(1)}%)`, 1];
     if (s.partialTp > 0 && !pos.partialDone && pnl >= s.partialTp && s.partialSell > 0 && s.partialSell < 100) {
       return [`Deelverkoop +${s.partialTp}%`, s.partialSell / 100];
@@ -244,29 +291,30 @@ export class PaperBot extends Bot {
     const now = Date.now();
     const mints = paper.positions.map((p) => p.mint);
     const waitMints = [...this.waiting.keys()];
-    // One Jupiter call gives fresh prices for SOL + open positions + coins waiting for a dip.
-    const wantSol = now - this.solAt > 30000;
-    let prices = {};
-    if (mints.length || waitMints.length || wantSol) {
-      try {
-        prices = await api.jupPrices([...(wantSol ? [api.SOL_MINT] : []), ...mints, ...waitMints]);
-        if (prices[api.SOL_MINT]?.usdPrice) { paper.solUsd = prices[api.SOL_MINT].usdPrice; this.solAt = now; }
-      } catch { /* fall back to DexScreener below */ }
+    // SOL price from Jupiter every 30s; coin prices, liquidity and 5m buy/sell counts from
+    // DexScreener every tick (its rate limit is 5× higher, which leaves Jupiter free for quotes).
+    if (now - this.solAt > 30000) await this.refreshSolPrice().catch(() => {});
+    let pairs = new Map();
+    if (mints.length || waitMints.length) {
+      try { pairs = api.bestPairs(await api.dsPairsForTokens([...mints, ...waitMints])); } catch { /* next tick */ }
     }
+    const prices = Object.fromEntries([...pairs].map(([m, p]) => [m, { usdPrice: Number(p.priceUsd) || 0 }]));
 
     await this.checkWaiting(prices);
     if (!mints.length) { this.recordEquity(); savePaper(); return; }
 
-    // DexScreener for liquidity (rug alarm) and 5m buy/sell pressure every ~15s, or when Jupiter has no price.
-    let pairs = new Map();
-    if (now - this.liqAt > 15000 || mints.some((m) => !prices[m]?.usdPrice)) {
-      pairs = api.bestPairs(await api.dsPairsForTokens(mints));
-      this.liqAt = now;
+    // Dev wallets of open positions: checked every 30s (exit when the dev dumps).
+    for (const pos of paper.positions) {
+      if (pos.dev && pos.devStart > 0 && now - (pos.devAt || 0) >= 30000) {
+        pos.devAt = now;
+        const bal = await devBalance(pos.dev, pos.mint, 25000);
+        if (bal != null) pos.devNow = bal;
+      }
     }
 
     for (const pos of [...paper.positions]) {
       const p = pairs.get(pos.mint);
-      const px = prices[pos.mint]?.usdPrice || Number(p?.priceUsd) || 0;
+      const px = prices[pos.mint]?.usdPrice || 0;
       if (p) { pos.liq = liqOf(p); pos.m5 = { buys: p.txns?.m5?.buys || 0, sells: p.txns?.m5?.sells || 0 }; }
       if (px && paper.solUsd) {
         pos.lastPriceUsd = px;

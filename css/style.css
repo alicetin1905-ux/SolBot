@@ -586,3 +586,12 @@ dialog .insight { margin-top: 12px; }
 @media (max-width: 700px) { .profiles { order: 3; width: 100%; } .pchip { flex: 1; padding: 6px 4px; font-size: 12px; } }
 
 table.nice tr.cur td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* learned score: feature importance */
+.imp { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.imp li { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13px; }
+.imp-bar { position: relative; height: 10px; border-radius: 99px; background: color-mix(in srgb, var(--muted) 14%, transparent); }
+.imp-bar::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--muted); }
+.imp-bar i { position: absolute; top: 0; bottom: 0; border-radius: 99px; }
+.imp-bar i.up { background: var(--ok); } .imp-bar i.down { background: var(--err); }
+@media (max-width: 600px) { .imp li { grid-template-columns: 110px minmax(0, 1fr); } }

@@ -1,8 +1,9 @@
 // Analyse page: turns tracker records into "do my filters work?" answers.
-import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261103000915';
-import { exchangeOf } from './flow.js?v=20261103000915';
-import { exitKind } from './paper.js?v=20261103000915';
-import { settings } from './store.js?v=20261103000915';
+import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261103104710';
+import { exchangeOf } from './flow.js?v=20261103104710';
+import { exitKind } from './paper.js?v=20261103104710';
+import { settings } from './store.js?v=20261103104710';
+import { getModel, FEATURES, labeled, MIN_SAMPLES } from './model.js?v=20261103104710';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const median = (a) => {
@@ -179,6 +180,90 @@ function optimizerCard(recs, history) {
   </div></article>`;
 }
 
+// ---------- filter optimizer (sniper thresholds) ----------
+/** Would a coin with these first-sight features pass the sniper filters `c`? */
+export function passesFilters(r, c) {
+  const f = r.f;
+  if (!f) return false;
+  const young = f.curve || r.origin !== 'lijst' || (f.age ?? 99) < 1;
+  if (f.curve) { if (f.mc < c.curveMinMcap) return false; } else {
+    if (f.liq < c.minLiq || f.mc < c.minMcap) return false;
+  }
+  if (f.vol < c.minVolH1 || f.bs < c.minBuySell) return false;
+  return (f.score || 0) >= (young ? c.youngMinScore : c.minScore);
+}
+
+let filtCache = { key: null };
+function filterOptimizerCard(recs) {
+  const measured = recs.filter((r) => r.f && r.cp && r.cp[15] != null);
+  const head = `<article class="card"><header class="card-head"><div class="title"><h2>Filter-optimizer (sniper)</h2>
+    <p>Test ruim 5.700 combinaties van sniper-drempels op alle gemeten coins (ook de afgekeurde): welke instelling had de meeste winnaars en de minste rugs doorgelaten?</p></div></header><div class="body">`;
+  if (measured.length < 30) {
+    return `${head}<div class="empty big">🧪 Nog ${measured.length}/30 gemeten coins met kenmerken. Coins van vóór deze update tellen niet mee.</div></div></article>`;
+  }
+  const s = settings.sniper;
+  const cur = { minScore: s.minScore, youngMinScore: s.youngMinScore, minLiq: s.minLiq, minVolH1: s.minVolH1, minBuySell: s.minBuySell, minMcap: s.minMcap, curveMinMcap: s.curveMinMcap };
+  const key = `${measured.length}:${JSON.stringify(cur)}`;
+  if (filtCache.key !== key) {
+    const evalCfg = (c) => {
+      const p = measured.filter((r) => passesFilters(r, c));
+      const win = p.length ? (p.filter((r) => r.max >= WIN_PCT).length / p.length) * 100 : 0;
+      const rug = p.length ? (p.filter((r) => r.rug).length / p.length) * 100 : 0;
+      return { c, n: p.length, win, rug, edge: win - rug };
+    };
+    const minN = Math.max(8, Math.round(measured.length * 0.03));
+    const res = [];
+    for (const minScore of [35, 42, 50, 55, 60, 65]) for (const youngMinScore of [30, 35, 42, 50]) for (const minLiq of [3000, 5000, 7000, 10000, 15000])
+      for (const minVolH1 of [500, 1500, 3000, 6000]) for (const minBuySell of [0.9, 1.0, 1.1, 1.3]) for (const [minMcap, curveMinMcap] of [[8000, 6000], [15000, 9000], [20000, 12000]]) {
+        const r = evalCfg({ minScore, youngMinScore, minLiq, minVolH1, minBuySell, minMcap, curveMinMcap });
+        if (r.n >= minN) res.push(r);
+      }
+    res.sort((a, b) => b.edge - a.edge || b.n - a.n);
+    filtCache = { key, cur: evalCfg(cur), top: res.slice(0, 5) };
+  }
+  const { cur: c0, top } = filtCache;
+  const k = (v) => `${Math.round(v / 100) / 10}K`;
+  const label = (c) => `score ≥ ${c.minScore} (jong ${c.youngMinScore}) · liq ≥ ${k(c.minLiq)} · vol 1u ≥ ${k(c.minVolH1)} · B/S ≥ ${c.minBuySell} · mcap ≥ ${k(c.minMcap)} (curve ${k(c.curveMinMcap)})`;
+  const row = (r, isCur) => `<tr${isCur ? ' class="cur"' : ''}><td>${isCur ? '<b>Huidige instellingen</b><br>' : ''}<span class="${isCur ? 'mint' : ''}">${label(r.c)}</span></td>
+    <td class="r">${r.n}</td><td class="r">${rate(r.n ? r.win : null, 'pos')}</td><td class="r">${rate(r.n ? r.rug : null, 'neg')}</td><td class="r">${pctCell(r.n ? r.edge : null, 0)}</td>
+    <td class="r">${isCur ? '' : `<button class="btn small primary" data-apply-filter='${esc(JSON.stringify(r.c))}'>Toepassen</button>`}</td></tr>`;
+  return `${head}
+    ${measured.length < 150 ? `<div class="insight warn">⚠️ Pas ${measured.length} gemeten coins: kies liever een instelling die veel coins doorlaat dan de allerhoogste voorsprong.</div>` : ''}
+    <table class="nice"><thead><tr><th>Sniper-drempels (bedragen in $)</th><th class="r">Coins door</th><th class="r">Winnaar</th><th class="r">Rug</th><th class="r">Voorsprong</th><th></th></tr></thead><tbody>
+    ${row(c0, true)}${top.map((r) => row(r, false)).join('')}</tbody></table>
+    <p class="mint">Voorsprong = winnaar% − rug% van de doorgelaten coins · ${measured.length} gemeten coins · alleen combinaties die ≥ 3% van de coins doorlaten</p>
+  </div></article>`;
+}
+
+// ---------- learned score ----------
+function modelCard(recs) {
+  const m = getModel();
+  const data = labeled(recs);
+  const pos = data.filter((d) => d.y).length;
+  const s = settings.sniper;
+  const quality = (a) => (a == null ? 'onbekend' : a >= 0.7 ? 'goed' : a >= 0.6 ? 'bruikbaar' : a >= 0.55 ? 'zwak' : 'niet beter dan toeval');
+  let body;
+  if (!m) {
+    body = `<div class="empty big">🧠 Nog geen model. Nodig: ${MIN_SAMPLES} coins met ≥ 1 uur metingen, waarvan minstens 8 winnaars (nu ${data.length}, ${pos} winnaars).</div>`;
+  } else {
+    const imp = m.w.map((w, i) => [FEATURES[i][0], w]).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const max = Math.max(...imp.map(([, w]) => Math.abs(w))) || 1;
+    const kpi = (cls, icon, label, value, sub) => `<div class="kpi ${cls}"><span class="kpi-icon">${icon}</span><div class="kpi-txt"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub}</div></div></div>`;
+    body = `<div class="kpis compact">
+        ${kpi('accent', '🧠', 'Getraind op', `${m.n} coins`, `${m.pos} winnaars (${Math.round(m.baseRate * 100)}%)`)}
+        ${kpi(m.auc >= 0.6 ? 'good' : 'warn', '🎯', 'Betrouwbaarheid (AUC)', m.auc == null ? '—' : m.auc.toFixed(2), `${quality(m.auc)} · 0,5 = toeval`)}
+        ${kpi('', '⏱', 'Getraind', new Date(m.trainedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }), new Date(m.trainedAt).toLocaleDateString('nl-NL'))}
+        ${kpi(s.useModel ? 'good' : '', s.useModel ? '✅' : '⏸', 'In sniper', s.useModel ? 'aan' : 'uit', `min. kans ${s.minProb}%`)}
+      </div>
+      <div class="sectionlbl">Wat voorspelt een winnaar? (groen = meer kans, rood = minder)</div>
+      <ul class="imp">${imp.map(([n, w]) => `<li><span>${esc(n)}</span><span class="imp-bar"><i class="${w >= 0 ? 'up' : 'down'}" style="width:${(Math.abs(w) / max) * 50}%;${w >= 0 ? 'left:50%' : 'right:50%'}"></i></span></li>`).join('')}</ul>`;
+  }
+  return `<article class="card"><header class="card-head"><div class="title"><h2>Geleerde score</h2>
+    <p>Een model leert van jouw gemeten coins welke kenmerken samengaan met een winnaar (≥ +${WIN_PCT}%, geen rug). Traint automatisch elk uur.</p></div></header>
+    <div class="controls"><button class="btn primary" data-train-model>🧠 Nu trainen</button>${m ? `<button class="btn" data-model-use="${s.useModel ? '0' : '1'}">${s.useModel ? '⏸ Niet gebruiken in sniper' : '▶ Gebruiken in sniper'}</button>` : ''}</div>
+    <div class="body">${body}</div></article>`;
+}
+
 export function renderAnalyse(el, tracker, history = []) {
   const recs = tracker.list();
   const ins = insights(recs);
@@ -230,6 +315,8 @@ export function renderAnalyse(el, tracker, history = []) {
     </div>
     ${tradeSection}
     ${optimizerCard(recs, history)}
+    ${filterOptimizerCard(recs)}
+    ${modelCard(recs)}
     <article class="card"><header class="card-head"><div class="title"><h2>Laatst gevolgde coins</h2><p>Klik voor details</p></div></header><div class="body">
     ${recent.length ? `<table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Uitkomst</th><th class="r">Gezien</th><th class="r">15m</th><th class="r">1u</th><th class="r">6u</th><th class="r">Max</th><th></th></tr></thead><tbody>
       ${recent.map((r) => `<tr class="click" data-mint="${esc(r.mint)}">

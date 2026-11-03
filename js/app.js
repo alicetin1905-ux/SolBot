@@ -1,11 +1,12 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103000915';
-import { SniperBot, fmt } from './sniper.js?v=20261103000915';
-import { SecurityBot } from './security.js?v=20261103000915';
-import { RealCheckBot } from './realcheck.js?v=20261103000915';
-import { PaperBot } from './paper.js?v=20261103000915';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103000915';
-import { TrackerBot } from './metingen.js?v=20261103000915';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103000915';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103104710';
+import { SniperBot, fmt } from './sniper.js?v=20261103104710';
+import { SecurityBot } from './security.js?v=20261103104710';
+import { RealCheckBot } from './realcheck.js?v=20261103104710';
+import { PaperBot } from './paper.js?v=20261103104710';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103104710';
+import { TrackerBot } from './metingen.js?v=20261103104710';
+import { train, setModel, getModel } from './model.js?v=20261103104710';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103104710';
 
 const sniper = new SniperBot();
 const security = new SecurityBot();
@@ -50,6 +51,7 @@ const SCHEMA = {
     ['launchMinAgeMin', 'Launch: eerst checken na (min)'], ['launchMaxAgeMin', 'Launch: volgen tot (min)'],
     ['curveMinMcap', 'Bonding curve: min. mcap ($)'],
     ['youngMinScore', 'Min. score jonge coins (launch/curve/<1u)'],
+    ['useModel', 'Geleerde score gebruiken als filter', 'bool'], ['minProb', 'Geleerde score: min. kans (%)'],
   ],
   security: [
     ['maxTop10', 'Max. top 10 holders (%)'], ['maxSingleHolder', 'Max. grootste holder (%)'],
@@ -59,6 +61,8 @@ const SCHEMA = {
     ['maxInsiders', 'Max. insider wallets'],
     ['minOrganic', 'Min. organic score (Jupiter, 0-100)'],
     ['strictDanger', 'RugCheck "danger" risico = afkeuren', 'bool'],
+    ['maxDevHold', 'Max. dev bezit (% supply)'], ['devSoldFail', 'Afkeuren als dev ≥ X% verkocht · 0 = alleen waarschuwen'],
+    ['maxDevMints', 'Max. tokens gemaakt door dev'], ['lpUnlockDays', 'Waarschuwen als LP-lock afloopt binnen (dagen)'],
   ],
   real: [
     ['rounds', 'Observatie rondes'], ['intervalSec', 'Tijd tussen rondes (sec)'],
@@ -71,8 +75,10 @@ const SCHEMA = {
     ['startSol', 'Startsaldo (SOL, bij reset)'], ['sizeSol', 'Positiegrootte (SOL)'],
     ['maxPos', 'Max. open posities'], ['tp', 'Take profit (%)'], ['sl', 'Stop loss (%)'],
     ['trailAct', 'Trailing activeert bij (+%)'], ['trail', 'Trailing afstand (%)'],
-    ['maxHoldMin', 'Max. houdtijd (min)'], ['slippageBps', 'Slippage (bps)'],
-    ['feeSol', 'Fee per trade (SOL)'], ['exitTickSec', 'Exit check elke (sec)'],
+    ['maxHoldMin', 'Max. houdtijd (min)'], ['slippageBps', 'Slippage tolerantie (bps, 1000 = 10%)'],
+    ['feeSol', 'Fee per transactie incl. priority/Jito (SOL)'],
+    ['latencyMs', 'Realisme: vertraging transactie (ms)'], ['failPct', 'Realisme: kans mislukte transactie (%)'],
+    ['devExitPct', 'Verkopen als dev ≥ X% van zijn bag dumpt · 0 = uit'], ['exitTickSec', 'Exit check elke (sec)'],
     ['maxLiqPct', 'Max. % van de pool per trade'], ['minSizeSol', 'Min. positie (SOL)'],
     ['partialTp', 'Deelverkoop bij (+%) · 0 = uit'], ['partialSell', 'Deelverkoop: % verkopen'],
     ['beAct', 'Break-even stop vanaf piek (+%) · 0 = uit'],
@@ -169,6 +175,7 @@ function renderKpis() {
     ['💼', 'Equity', sol(s.equity, 3), pct(s.totalPct, 2), s.totalPct >= 0 ? 'good' : 'bad'],
     ['💰', 'Vrij saldo', sol(s.balance, 3), `start ${paper.startSol} ◎`],
     ['📈', 'Gerealiseerd', `<span class="${s.realized >= 0 ? 'pos' : 'neg'}">${s.realized >= 0 ? '+' : ''}${s.realized.toFixed(4)} ◎</span>`, `${s.trades} trades`],
+    ['❌', 'Mislukte tx', (paper.fails?.tx || 0) + (paper.fails?.slip || 0), `${paper.fails?.slip || 0}× slippage · ${(paper.fails?.feesSol || 0).toFixed(3)} ◎ fees`],
     ['🎯', 'Win rate', s.trades ? `${Math.round(s.winRate)}%` : '—', `${paper.history.filter((t) => t.pnlSol > 0).length} gewonnen`],
     ['📂', 'Open posities', `${paper.positions.length}/${settings.paper.maxPos}`, sol(s.open, 3)],
     s.paused ? ['⏸', 'Status', 'gepauzeerd', esc(s.paused), 'warn'] : ['▶', 'Status', 'kopen actief', `${trader.waiting.size} wacht op terugval`, 'good'],
@@ -375,7 +382,7 @@ function renderSniper() {
   const srcs = Object.entries(sniper.sources);
   const srcLine = `<div class="srcline"><span class="mint">Bronnen laatste scan:</span> ${chip(`🆕 PumpPortal live <b>${sniper.live.creates}</b>`, 'launch')}${chip(`🎓 migraties <b>${sniper.live.migrations}</b>`, 'migratie')}${srcs.map(([k, n]) => chip(`${esc(k)} <b>${n}</b>`)).join('')}</div>`;
   $('[data-bot="sniper"] [data-body]').innerHTML = srcLine + (rows.length ? `
-    <table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Score</th><th class="r" title="Bij bonding curve: ~20% van market cap">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th><th>Status</th></tr></thead>
+    <table class="nice"><thead><tr><th>Token</th><th>Bron</th><th>Score</th><th class="r" title="Bij bonding curve: ~20% van market cap">Liq</th><th class="r">Vol 1u</th><th class="r">B/S</th><th class="r">1u</th><th class="r">Leeftijd</th>${getModel() ? '<th class="r" title="Kans op een winnaar volgens de geleerde score">Kans</th>' : ''}<th>Status</th></tr></thead>
     <tbody>${rows.map((r) => `
       <tr class="click ${r.pass ? '' : 'dim'}" data-mint="${esc(r.mint)}">
         <td>${tokenCell(r.symbol, r.mint)}</td>
@@ -384,6 +391,7 @@ function renderSniper() {
         <td class="r">$${fmt(r.liq)}</td><td class="r">$${fmt(r.volH1)}</td>
         <td class="r">${r.bs.toFixed(2)}</td><td class="r">${pct(r.mom, 0)}</td>
         <td class="r">${r.ageH < 999 ? ago(r.ageH * 3.6e6) : '?'}</td>
+        ${getModel() ? `<td class="r">${r.prob == null ? '—' : `${Math.round(r.prob * 100)}%`}</td>` : ''}
         <td>${r.pass ? chip('✓ kandidaat', 'good') : `<span class="reason" title="${esc(r.reason)}">${esc(r.reason)}</span>`}</td>
       </tr>`).join('')}</tbody></table>`
     : `<div class="empty big">${sniper.busy ? '⏳ Scannen…' : sniper.results.length ? 'Geen coins in dit filter.' : '🎯 Nog geen scan. Klik op Start of Nu scannen.'}</div>`);
@@ -541,7 +549,7 @@ function showDetail(mint) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile],[data-apply-exit]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile],[data-apply-exit],[data-apply-filter],[data-train-model],[data-model-use]');
   if (!el) return;
   const card = el.closest('[data-bot],[data-mini]');
   if (el.hasAttribute('data-clear-log')) {
@@ -565,6 +573,21 @@ document.addEventListener('click', async (e) => {
     security.addManual(el.dataset.check).catch((err) => log('security', err.message, 'err'));
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
+  } else if (el.dataset.applyFilter) {
+    const cfg = JSON.parse(el.dataset.applyFilter);
+    Object.assign(settings.sniper, cfg);
+    saveSettings();
+    buildForms();
+    log('sniper', `Sniper-drempels uit filter-optimizer toegepast: score ≥ ${cfg.minScore} (jong ${cfg.youngMinScore}), liq ≥ $${cfg.minLiq}, vol ≥ $${cfg.minVolH1}, B/S ≥ ${cfg.minBuySell}`, 'ok');
+    render();
+  } else if (el.hasAttribute('data-train-model')) {
+    trainModel(true);
+  } else if (el.dataset.modelUse) {
+    settings.sniper.useModel = el.dataset.modelUse === '1';
+    saveSettings();
+    buildForms();
+    log('sniper', `Geleerde score ${settings.sniper.useModel ? 'aan' : 'uit'} als sniper-filter`, 'ok');
+    render();
   } else if (el.dataset.applyExit) {
     const cfg = JSON.parse(el.dataset.applyExit);
     Object.assign(settings.paper, cfg);
@@ -638,6 +661,17 @@ document.addEventListener('keydown', (e) => {
   const t = e.target.closest?.('[data-goto]');
   if (t && (e.key === 'Enter' || e.key === ' ') && e.target === t) { e.preventDefault(); location.hash = `#/${t.dataset.goto}`; }
 });
+
+// ---------- learned score: (re)train on the tracker's measurements ----------
+function trainModel(manual = false) {
+  const m = train(tracker.list());
+  if (m.error) { if (manual) log('app', `🧠 ${m.error}`, 'warn'); return; }
+  setModel(m);
+  log('app', `🧠 Model getraind op ${m.n} coins (${m.pos} winnaars) · betrouwbaarheid AUC ${m.auc == null ? '?' : m.auc.toFixed(2)}`, 'ok');
+  render();
+}
+setInterval(() => trainModel(false), 60 * 60000);
+setTimeout(() => { if (!getModel()) trainModel(false); }, 15000);
 
 // ---------- boot ----------
 initFlow($('#flow'));

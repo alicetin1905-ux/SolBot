@@ -1,6 +1,7 @@
-import { Bot } from './bot.js?v=20261103000915';
-import * as api from './api.js?v=20261103000915';
-import { settings, tokens, upsertToken, emit, log } from './store.js?v=20261103000915';
+import { Bot } from './bot.js?v=20261103104710';
+import * as api from './api.js?v=20261103104710';
+import { getModel, predict } from './model.js?v=20261103104710';
+import { settings, tokens, upsertToken, emit, log } from './store.js?v=20261103104710';
 
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const PUMPPORTAL_WS = 'wss://pumpportal.fun/api/data';
@@ -133,6 +134,7 @@ export class SniperBot extends Bot {
       this.launches.set(d.mint, {
         mint: d.mint, symbol: d.symbol, name: d.name, kind: 'launch', createdAt: now,
         nextEval: now + s.launchMinAgeMin * 60000,
+        dev: d.traderPublicKey, devInitial: Number(d.initialBuy) || 0, // dev wallet + tokens it bought at launch
       });
       emit('sniper:launch', { mint: d.mint, symbol: d.symbol, kind: 'launch' });
     } else if (d.txType === 'migrate') {
@@ -223,19 +225,25 @@ export class SniperBot extends Bot {
       const young = m.curve || src !== 'lijst' || m.ageH < 1;
       const floor = young ? s.youngMinScore : s.minScore;
       if (!reason && m.score < floor) reason = `score ${m.score} < ${floor}${young ? ' (jong)' : ''}`;
+      // Learned score (optional): chance of a clean winner according to the trained model.
+      const prob = predict(getModel(), { liq: m.liq, vol: m.volH1, bs: m.bs, mom: m.mom, age: m.ageH, mc: m.mcap, curve: m.curve, score: m.score, origin: src });
+      if (!reason && s.useModel && prob != null && prob * 100 < s.minProb) reason = `model: kans ${(prob * 100).toFixed(0)}% < ${s.minProb}%`;
       const r = {
         mint, symbol: p.baseToken.symbol, name: p.baseToken.name, ...m, url: p.url, dex: p.dexId,
-        origin: src, pass: !reason, reason, seenAt: now,
+        origin: src, pass: !reason, reason, seenAt: now, prob,
       };
       batch.push(r);
       this.resultMap.set(mint, r);
 
       if (!reason && !tokens.has(mint)) {
         fresh++;
+        const L = this.launches.get(mint);
         this.launches.delete(mint);
         const t = upsertToken(mint, {
           symbol: p.baseToken.symbol, name: p.baseToken.name, pair: p,
           sniperScore: m.score, stage: 'security-queue', origin: src,
+          ...(L?.dev ? { dev: L.dev, devInitial: L.devInitial } : {}),
+          features: { liq: m.liq, vol: m.volH1, bs: m.bs, mom: m.mom, age: m.ageH, mc: m.mcap, curve: m.curve, score: m.score },
         });
         const tag = src === 'launch' ? '🆕 ' : src === 'migratie' ? '🎓 ' : '';
         log(this.id, `🎯 ${tag}${t.symbol} score ${m.score} · ${m.curve ? 'curve mcap' : 'liq'} $${fmt(m.curve ? m.mcap : m.liq)} · B/S ${m.bs.toFixed(2)} → security`, 'ok');
