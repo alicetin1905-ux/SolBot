@@ -10,6 +10,25 @@ Vier Solana bots die samen een pipeline vormen, live in je browser via GitHub Pa
 | 3 | **Real check** | Observeert goedgekeurde coins meerdere rondes: blijft de liquiditeit staan, gaat de prijs niet onderuit, blijven kopers komen, klopt de DexScreener prijs met Jupiter, en is de coin nog steeds verkoopbaar. Geeft een totaalscore. |
 | 4 | **Paper trader** | Koopt bevestigde coins met nep-SOL op echte Jupiter quotes. **Kopen:** grootte op basis van totaalscore, max. 2% van de pool, max. round-trip kosten, na een pump eerst wachten op een terugval. **Verkopen:** stop loss, break-even stop, deelverkoop, take profit, trailing stop, verkoopdruk, dode coin, max houdtijd, rug-alarm (elke 3 sec). **Risico:** daglimiet, pauze na verliesreeks, nooit dezelfde coin opnieuw. Verkoopt direct als de dev dumpt. **Realistisch:** vertraging per transactie, kans op mislukte transacties en slippage-checks, met fees ook bij mislukte pogingen. |
 
+## 24/7 op je Mac
+Open **Terminal** op de Mac en plak:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/alicetin1905-ux/SolBot/main/server/install-mac.sh | bash
+```
+
+Dat installeert SolBot in `~/SolBot`, start de server automatisch (ook na een herstart) en houdt de Mac wakker.
+Je data staat in `~/SolBot-data`. Aan het eind toont Terminal de adressen en een **toegangscode**.
+
+- **Op de Mac:** http://localhost:8787
+- **Thuis op je iPhone (zelfde wifi):** `http://<naam-van-je-mac>.local:8787` → Deel → Zet op beginscherm
+- **Updaten:** plak hetzelfde commando opnieuw · **Log:** `tail -f ~/SolBot-data/server.log`
+- **Pushmeldingen:** tik in het dashboard op 🔕 en volg de stappen (gratis app *ntfy*).
+- **Data meenemen:** 💾 Backup op de Analyse-pagina van de oude versie, en ♻️ Backup terugzetten op de Mac.
+
+Het dashboard ziet zelf of het van de Mac komt (groene badge met de naam van je Mac): dan draaien de bots op de Mac
+en sturen alle knoppen hun opdracht naar de Mac. De GitHub Pages-versie blijft gewoon werken in de browser.
+
 ## Op je iPhone als app
 1. Open **https://alicetin1905-ux.github.io/SolBot/** in **Safari**.
 2. Tik op **Deel** (vierkantje met pijl omhoog) → **Zet op beginscherm** → **Voeg toe**.
@@ -51,5 +70,6 @@ Dit is **alleen paper trading**: er is geen wallet en er wordt geen echt geld ge
 Geen enkele check is 100% waterdicht; memecoins zijn extreem risicovol. Geen financieel advies.
 
 ## Ontwikkelen
+Lokaal de server testen: `node server/solbot-server.mjs` (Node 22+, data in `~/SolBot-data` of `$SOLBOT_DATA`, poort `$PORT`).
 Draai `./tools/bump-version.sh` vóór elke commit die `js/` of `css/` wijzigt. Dat zet één versienummer op alle
 bestanden, zodat browsers na een update nooit oude en nieuwe bestanden door elkaar laden.

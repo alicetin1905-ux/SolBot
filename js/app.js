@@ -1,25 +1,32 @@
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile, currentProfile } from './store.js?v=20261103190705';
-import { SniperBot, fmt } from './sniper.js?v=20261103190705';
-import { SecurityBot } from './security.js?v=20261103190705';
-import { RealCheckBot } from './realcheck.js?v=20261103190705';
-import { PaperBot } from './paper.js?v=20261103190705';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103190705';
-import { TrackerBot } from './metingen.js?v=20261103190705';
-import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261103190705';
-import { train, setModel, getModel } from './model.js?v=20261103190705';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103190705';
+import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261103192235';
+import { fmt } from './sniper.js?v=20261103192235';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103192235';
+import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261103192235';
+import { getModel } from './model.js?v=20261103192235';
+import { createEngine } from './engine.js?v=20261103192235';
+import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261103192235';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103192235';
 
-const sniper = new SniperBot();
-const security = new SecurityBot();
-const real = new RealCheckBot();
-const trader = new PaperBot();
-const bots = { sniper, security, real, paper: trader };
-const tracker = new TrackerBot(); // background: always on, not part of start/stop all
+const eng = createEngine();
+const { sniper, security, real, trader, tracker, bots } = eng;
 
-// ---------- pipeline wiring ----------
-on('candidate', (t) => security.enqueue(t));
-on('secured', (t) => real.add(t));
-on('confirmed', (t) => trader.onConfirmed(t));
+/** Runs a user action: locally, or on the Mac when the dashboard is connected to it. */
+async function run(name, args = {}) {
+  try {
+    if (remote.active) {
+      const r = await remoteCmd(name, args);
+      await pull(eng);
+      return r;
+    }
+    return await eng.commands[name](args);
+  } catch (err) {
+    log('app', `Actie mislukt: ${err.message}`, 'err');
+    return { error: err.message };
+  } finally {
+    buildForms();
+    render();
+  }
+}
 
 // ---------- helpers ----------
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -107,11 +114,8 @@ function buildForms() {
     form.addEventListener('change', (e) => {
       const el = e.target;
       if (!el.name) return;
-      if (el.type === 'checkbox') settings[bot][el.name] = el.checked;
-      else if (el.value !== '' && Number.isFinite(Number(el.value))) settings[bot][el.name] = Number(el.value);
-      saveSettings();
-      if (bot === 'sniper' && /^use(Launches|Migrations)$/.test(el.name)) { sniper.closeSocket(); sniper.ensureSocket(); }
-      log(bot, `Instelling ${el.name} = ${settings[bot][el.name]}`);
+      if (el.type === 'checkbox') run('setting', { bot, key: el.name, value: el.checked });
+      else if (el.value !== '' && Number.isFinite(Number(el.value))) run('setting', { bot, key: el.name, value: Number(el.value) });
     });
     form.addEventListener('submit', (e) => e.preventDefault());
   }
@@ -193,7 +197,24 @@ function renderKpis() {
 
 const confirmedCount = () => real.done.filter((t) => t.real && t.stage !== 'rejected').length;
 
+function renderRemoteBadge() {
+  const el = $('#remoteBadge');
+  if (!remote.active) { el.hidden = true; return; }
+  el.hidden = false;
+  const stale = !remote.online || Date.now() - remote.lastOk > 15000;
+  el.className = `badge remote ${stale ? 'off' : 'on'}`;
+  el.textContent = stale ? `⚠️ ${remote.name} offline` : `🖥 ${remote.name}`;
+  el.title = stale ? `Geen verbinding met de Mac: ${remote.error || 'geen antwoord'}` : 'Bots draaien 24/7 op de Mac';
+}
+
 function renderNotifyBtn() {
+  if (remote.active) {
+    const b = $('#notifyBtn');
+    b.textContent = remote.ntfy ? '🔔' : '🔕';
+    b.classList.toggle('on', !!remote.ntfy);
+    b.title = remote.ntfy ? `Push via ntfy aan (${remote.ntfy})` : 'Pushmeldingen naar je iPhone instellen';
+    return;
+  }
   const st = notifyState();
   const btn = $('#notifyBtn');
   btn.textContent = st === 'on' ? '🔔' : '🔕';
@@ -500,7 +521,7 @@ function render() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderKpis(); renderFlow(); renderProfiles(); renderNotifyBtn();
+    renderKpis(); renderFlow(); renderProfiles(); renderNotifyBtn(); renderRemoteBadge();
     keepAwake(Object.values(bots).some((b) => b.running)); // screen stays on while bots run
     Object.keys(bots).forEach(renderBotHead);
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
@@ -565,52 +586,35 @@ document.addEventListener('click', async (e) => {
   if (el.hasAttribute('data-clear-log')) {
     $('[data-log]', el.closest('.card')).innerHTML = '';
   } else if (el.hasAttribute('data-toggle')) {
-    const b = bots[card.dataset.bot || card.dataset.mini];
-    b.running ? b.stop() : b.start();
-    persistRunning();
+    run('toggle', { bot: card.dataset.bot || card.dataset.mini });
   } else if (el.hasAttribute('data-once')) {
-    bots[card.dataset.bot].runOnce();
+    run('once', { bot: card.dataset.bot });
   } else if (el.hasAttribute('data-settings')) {
     const f = $('[data-form]', card); f.hidden = !f.hidden;
   } else if (el.dataset.close) {
-    const pos = paper.positions.find((p) => p.id === el.dataset.close);
-    if (pos) { el.disabled = true; await trader.sell(pos, 'Handmatig verkocht'); }
+    el.disabled = true;
+    await run('close', { id: el.dataset.close });
   } else if (el.dataset.buy) {
-    const t = tokens.get(el.dataset.buy);
-    if (t) { el.disabled = true; try { await trader.buy(t); } catch (err) { log('paper', `Koop fout: ${err.message}`, 'err'); } render(); }
+    el.disabled = true;
+    await run('buy', { mint: el.dataset.buy });
   } else if (el.dataset.check) {
     $('#detail').close();
-    security.addManual(el.dataset.check).catch((err) => log('security', err.message, 'err'));
+    run('check', { mint: el.dataset.check });
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
   } else if (el.dataset.applyFilter) {
     const cfg = JSON.parse(el.dataset.applyFilter);
-    Object.assign(settings.sniper, cfg);
-    saveSettings();
-    buildForms();
-    log('sniper', `Sniper-drempels uit filter-optimizer toegepast: score ≥ ${cfg.minScore} (jong ${cfg.youngMinScore}), liq ≥ $${cfg.minLiq}, vol ≥ $${cfg.minVolH1}, B/S ≥ ${cfg.minBuySell}`, 'ok');
-    render();
+    run('settings', { bot: 'sniper', patch: cfg, msg: `Sniper-drempels uit filter-optimizer toegepast: score ≥ ${cfg.minScore} (jong ${cfg.youngMinScore}), liq ≥ $${cfg.minLiq}, vol ≥ $${cfg.minVolH1}, B/S ≥ ${cfg.minBuySell}` });
   } else if (el.hasAttribute('data-train-model')) {
-    trainModel(true);
+    run('train', { manual: true });
   } else if (el.dataset.modelUse) {
-    settings.sniper.useModel = el.dataset.modelUse === '1';
-    saveSettings();
-    buildForms();
-    log('sniper', `Geleerde score ${settings.sniper.useModel ? 'aan' : 'uit'} als sniper-filter`, 'ok');
-    render();
+    const use = el.dataset.modelUse === '1';
+    run('settings', { bot: 'sniper', patch: { useModel: use }, msg: `Geleerde score ${use ? 'aan' : 'uit'} als sniper-filter` });
   } else if (el.dataset.applyExit) {
     const cfg = JSON.parse(el.dataset.applyExit);
-    Object.assign(settings.paper, cfg);
-    saveSettings();
-    buildForms();
-    log('paper', `Exit-instellingen uit optimizer toegepast: TP +${cfg.tp}%, SL −${cfg.sl}%, trailing ${cfg.trailAct ? `${cfg.trail}% na +${cfg.trailAct}%` : 'uit'}, deelverkoop ${cfg.partialTp ? `+${cfg.partialTp}%` : 'uit'}`, 'ok');
-    render();
+    run('settings', { bot: 'paper', patch: cfg, msg: `Exit-instellingen uit optimizer toegepast: TP +${cfg.tp}%, SL −${cfg.sl}%, trailing ${cfg.trailAct ? `${cfg.trail}% na +${cfg.trailAct}%` : 'uit'}, deelverkoop ${cfg.partialTp ? `+${cfg.partialTp}%` : 'uit'}` });
   } else if (el.dataset.profile) {
-    applyProfile(el.dataset.profile);
-    buildForms();
-    log('app', `Profiel ${PROFILES[el.dataset.profile].label} actief`, 'ok');
-    for (const b of ['sniper', 'security', 'real', 'paper']) log(b, `Profiel ${PROFILES[el.dataset.profile].label} toegepast`, 'ok');
-    render();
+    run('profile', { name: el.dataset.profile });
   } else if (el.dataset.filter) {
     sniperFilter = el.dataset.filter;
     render();
@@ -624,27 +628,47 @@ $$('form.manual').forEach((form) => form.addEventListener('submit', async (e) =>
   const input = form.elements.mint;
   const mint = input.value.trim();
   if (!mint) return;
-  try {
-    await security.addManual(mint);
-    input.value = '';
-    if (!security.running) log('security', 'Tip: start de Security bot om de wachtrij te verwerken', 'warn');
-  } catch (err) { log('security', err.message, 'err'); }
+  const r = await run('check', { mint });
+  if (!r?.error) input.value = '';
 }));
 
-const RUN_KEY = 'solbot.running.v1';
-function persistRunning() {
-  try { localStorage.setItem(RUN_KEY, JSON.stringify(Object.keys(bots).filter((k) => bots[k].running))); } catch { /* ignore */ }
-}
-$('#notifyBtn').onclick = async () => { await toggleNotify(); render(); };
-$('#startAll').onclick = () => { Object.values(bots).forEach((b) => b.start()); persistRunning(); };
-$('#stopAll').onclick = () => { Object.values(bots).forEach((b) => b.running && b.stop()); persistRunning(); };
-$('#resetPaper').onclick = () => { if (confirm('Paper account resetten? Alle posities en historie worden gewist.')) trader.reset(); };
+$('#notifyBtn').onclick = async () => {
+  if (!remote.active) { await toggleNotify(); render(); return; }
+  // On the Mac server: real push to the iPhone via the free ntfy app, also when the phone is locked.
+  const topic = prompt('Pushmeldingen van je Mac naar je iPhone (gratis app "ntfy"):\n\n1. Installeer "ntfy" uit de App Store\n2. Tik daar op + en kies een eigen, moeilijk te raden naam, bijv. solbot-' + Math.random().toString(36).slice(2, 8) + '\n3. Vul precies dezelfde naam hier in\n\nLeeg laten = meldingen uit.', remote.ntfy || '');
+  if (topic === null) return;
+  const r = await run('ntfy', { topic });
+  remote.ntfy = r?.result?.topic || '';
+  render();
+};
+$('#startAll').onclick = () => run('startAll');
+$('#stopAll').onclick = () => run('stopAll');
+$('#resetPaper').onclick = () => { if (confirm('Paper account resetten? Alle posities en historie worden gewist.')) run('resetPaper'); };
 $('#exportTracker').onclick = () => exportTracker(tracker);
 $('#exportTrades').onclick = () => exportTrades(paper.history);
-$('#resetTracker').onclick = () => { if (confirm('Alle metingen wissen?')) { tracker.reset(); render(); } };
-$('#resetSettings').onclick = () => {
-  if (!confirm('Alle instellingen terugzetten naar standaard?')) return;
-  resetSettings(); buildForms(); log('app', 'Instellingen hersteld', 'warn');
+$('#resetTracker').onclick = () => { if (confirm('Alle metingen wissen?')) run('resetTracker'); };
+$('#resetSettings').onclick = () => { if (confirm('Alle instellingen terugzetten naar standaard?')) run('resetSettings'); };
+$('#exportBackup').onclick = async () => {
+  try {
+    const b = await exportBackup();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(b)], { type: 'application/json' }));
+    a.download = `solbot-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  } catch (err) { log('app', `Backup mislukt: ${err.message}`, 'err'); }
+};
+$('#importBackup').onclick = () => $('#importFile').click();
+$('#importFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const b = JSON.parse(await file.text());
+    if (!confirm(`Backup van ${new Date(b.at).toLocaleString('nl-NL')} terugzetten? Huidige data${remote.active ? ' op de Mac' : ''} wordt vervangen.`)) return;
+    await importBackup(b);
+    log('app', 'Backup teruggezet, herstarten…', 'ok');
+    setTimeout(() => location.reload(), remote.active ? 4000 : 300);
+  } catch (err) { log('app', `Terugzetten mislukt: ${err.message}`, 'err'); }
+  e.target.value = '';
 };
 
 on('bot', render);
@@ -673,28 +697,33 @@ document.addEventListener('keydown', (e) => {
   if (t && (e.key === 'Enter' || e.key === ' ') && e.target === t) { e.preventDefault(); location.hash = `#/${t.dataset.goto}`; }
 });
 
-// ---------- learned score: (re)train on the tracker's measurements ----------
-function trainModel(manual = false) {
-  const m = train(tracker.list());
-  if (m.error) { if (manual) log('app', `🧠 ${m.error}`, 'warn'); return; }
-  setModel(m);
-  log('app', `🧠 Model getraind op ${m.n} coins (${m.pos} winnaars) · betrouwbaarheid AUC ${m.auc == null ? '?' : m.auc.toFixed(2)}`, 'ok');
-  render();
-}
-setInterval(() => trainModel(false), 60 * 60000);
-setTimeout(() => { if (!getModel()) trainModel(false); }, 15000);
-
 // ---------- boot ----------
 initPWA();
 initFlow($('#flow'));
-tracker.start();
 window.__solbotStarted = true;
 document.getElementById('bootError').hidden = true;
 buildForms();
 route();
 setInterval(render, 3000);
-log('app', 'SolBot geladen — PAPER MODE (geen echt geld).', 'ok');
-try {
-  const prev = JSON.parse(localStorage.getItem(RUN_KEY) || '[]');
-  prev.forEach((k) => bots[k]?.start());
-} catch { /* ignore */ }
+detectRemote().then((isRemote) => {
+  if (isRemote) {
+    // Dashboard served by the Mac: show the Mac's bots, don't run any here.
+    document.documentElement.classList.add('remote');
+    log('app', `🖥 Verbonden met ${remote.name}: de bots draaien 24/7 op de Mac.`, 'ok');
+    startRemote(eng, () => { buildFormsIfIdle(); render(); });
+    remoteCmd('serverInfo').then((r) => { remote.ntfy = r?.result?.ntfyTopic || ''; render(); }).catch(() => {});
+  } else {
+    eng.startLocal();
+    log('app', 'SolBot geladen — PAPER MODE (geen echt geld). De bots draaien in deze browser.', 'ok');
+  }
+  render();
+});
+
+/** In remote mode settings can change on the Mac (or another device): refresh forms unless you are typing. */
+let lastSettings = '';
+function buildFormsIfIdle() {
+  const now = JSON.stringify(settings);
+  if (now === lastSettings || document.activeElement?.closest?.('[data-form]')) return;
+  lastSettings = now;
+  buildForms();
+}

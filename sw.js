@@ -1,7 +1,7 @@
 // SolBot service worker: makes the home-screen app open without network and shows
 // notifications. Network-first for our own files (so updates are never stale);
 // API calls to other sites are never cached.
-const CACHE = 'solbot-shell-v2'; // bump to refresh cached icons
+const CACHE = 'solbot-shell-v3'; // bump to refresh cached icons
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/apple-touch-icon.png', './icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
@@ -19,7 +19,8 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
-  if (req.method !== 'GET' || url.origin !== self.location.origin) return; // live data: always network
+  // live data (other sites, or the Mac server's /api/): always network, never cached
+  if (req.method !== 'GET' || url.origin !== self.location.origin || url.pathname.includes('/api/')) return;
   e.respondWith((async () => {
     try {
       const res = await fetch(req);

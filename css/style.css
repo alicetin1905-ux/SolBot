@@ -618,3 +618,7 @@ html.standalone .btn, html.standalone .tabs a, html.standalone .pchip { -webkit-
 .install-hint div > span { color: var(--muted); }
 .install-hint .ih-share { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); font-size: 12px; }
 @keyframes ih-in { from { transform: translateY(20px); opacity: 0; } }
+
+/* Mac (remote) connection badge */
+.badge.remote.on { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); }
+.badge.remote.off { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 40%, transparent); }

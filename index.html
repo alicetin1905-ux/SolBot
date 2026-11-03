@@ -13,7 +13,7 @@
   <meta name="apple-mobile-web-app-title" content="SolBot">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="theme-color" content="#0b0d14">
-  <link rel="stylesheet" href="css/style.css?v=20261103190705">
+  <link rel="stylesheet" href="css/style.css?v=20261103192235">
 </head>
 <body>
   <header class="top">
@@ -24,6 +24,7 @@
         <p class="sub">Sniper → Security → Real check → Paper trade</p>
       </div>
       <span class="badge paper">PAPER MODE</span>
+      <span class="badge remote" id="remoteBadge" hidden></span>
     </div>
     <div class="profiles" id="profiles" role="group" aria-label="Profiel"></div>
     <div class="top-actions">
@@ -175,6 +176,8 @@
         <div class="controls">
           <button class="btn" id="exportTracker">⬇ Metingen (CSV)</button>
           <button class="btn" id="exportTrades">⬇ Trades (CSV)</button>
+          <button class="btn" id="exportBackup" title="Instellingen, trades, metingen en model als bestand">💾 Backup</button>
+          <button class="btn" id="importBackup">♻️ Backup terugzetten</button><input type="file" id="importFile" accept="application/json,.json" hidden>
           <button class="btn danger ghost" id="resetTracker">Metingen wissen</button>
         </div>
         <div class="kpis" data-kpis-analyse></div>
@@ -199,7 +202,7 @@
   </div>
   <script>
     // Shows a visible message (instead of an empty page) when the app modules fail to load.
-    window.SOLBOT_VERSION = '20261103190705';
+    window.SOLBOT_VERSION = '20261103192235';
     (function () {
       var shown = false;
       function show(msg) {
