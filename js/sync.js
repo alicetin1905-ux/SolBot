@@ -1,8 +1,8 @@
 // State sync between the Mac server (runs the bots) and dashboards (view + send commands).
 // "state" is small and polled every few seconds; "slow" holds the big parts (trade history,
 // equity curve, tracker measurements, model) and is only sent when something changed.
-import { settings, paper, tokens, on } from './store.js?v=20261103192235';
-import { getModel, setModel } from './model.js?v=20261103192235';
+import { settings, paper, tokens, on } from './store.js?v=20261104090802';
+import { getModel, setModel } from './model.js?v=20261104090802';
 
 export const SYNC_EVENTS = ['log', 'candidate', 'sniper:results', 'sniper:launch', 'security:done', 'real:done', 'paper:buy', 'paper:sell', 'paper:partial'];
 const BOT_IDS = ['sniper', 'security', 'real', 'paper'];
@@ -54,6 +54,7 @@ export function buildState(eng, eventLog, since = 0, have = {}) {
     watch: real.watch,
     signals: trader.signals.slice(0, 20).map(slimToken),
     positions: paper.positions,
+    learn: { changes: eng.learner.state.changes.slice(0, 20), status: eng.learner.state.status, lastRun: eng.learner.state.lastRun },
   };
   const hashes = {};
   const send = {};
@@ -103,6 +104,7 @@ export function applyState(eng, s) {
   if (s.watch) real.watch = s.watch;
   if (s.signals) trader.signals = s.signals;
   if (s.positions) paper.positions = s.positions;
+  if (s.learn) Object.assign(eng.learner.state, s.learn);
   Object.assign(sniper, { scans: s.sniper.scans, live: s.sniper.live, sources: s.sniper.sources, launches: { size: s.sniper.launches } });
   Object.assign(security, { queue: s.security.queue, stats: s.security.stats, active: s.security.active });
   trader.waiting = new Map(s.trader.waiting);

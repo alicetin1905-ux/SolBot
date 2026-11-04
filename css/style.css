@@ -622,3 +622,6 @@ html.standalone .btn, html.standalone .tabs a, html.standalone .pchip { -webkit-
 /* Mac (remote) connection badge */
 .badge.remote.on { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); }
 .badge.remote.off { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 40%, transparent); }
+
+.learn-card.on { border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); }
+.learn-card .kpis.compact { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }

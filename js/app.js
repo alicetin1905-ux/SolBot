@@ -1,11 +1,11 @@
-import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261103192235';
-import { fmt } from './sniper.js?v=20261103192235';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261103192235';
-import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261103192235';
-import { getModel } from './model.js?v=20261103192235';
-import { createEngine } from './engine.js?v=20261103192235';
-import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261103192235';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261103192235';
+import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261104090802';
+import { fmt } from './sniper.js?v=20261104090802';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261104090802';
+import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261104090802';
+import { getModel } from './model.js?v=20261104090802';
+import { createEngine } from './engine.js?v=20261104090802';
+import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261104090802';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261104090802';
 
 const eng = createEngine();
 const { sniper, security, real, trader, tracker, bots } = eng;
@@ -99,6 +99,8 @@ const SCHEMA = {
     ['dailyLossPct', 'Daglimiet verlies (% van start) · 0 = uit'],
     ['maxLossStreak', 'Pauze na X verliezen op rij · 0 = uit'], ['cooldownMin', 'Pauze duur (min)'],
     ['noRebuy', 'Nooit dezelfde coin opnieuw kopen', 'bool'],
+    ['sizeSlope', 'Geleerd: invloed score op grootte (1 = normaal)'],
+    ['multLijst', 'Geleerd: grootte × lijst-coins'], ['multLaunch', 'Geleerd: grootte × launches'], ['multMigratie', 'Geleerd: grootte × migraties'],
   ],
 };
 
@@ -527,7 +529,7 @@ function render() {
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
     renderEquity();
     const an = $('#analyse');
-    if (an.offsetParent !== null) renderAnalyse(an, tracker, paper.history);
+    if (an.offsetParent !== null) renderAnalyse(an, tracker, paper.history, eng.learner);
     $('[data-cnt="analyse"]').textContent = Object.keys(tracker.records).length || '';
   });
 }
@@ -580,7 +582,7 @@ function showDetail(mint) {
 
 // ---------- events ----------
 document.addEventListener('click', async (e) => {
-  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile],[data-apply-exit],[data-apply-filter],[data-train-model],[data-model-use]');
+  const el = e.target.closest('[data-mint],[data-close],[data-buy],[data-check],[data-toggle],[data-once],[data-settings],[data-clear-log],[data-goto],[data-filter],[data-profile],[data-apply-exit],[data-apply-filter],[data-train-model],[data-model-use],[data-learn-auto],[data-learn-run],[data-learn-revert]');
   if (!el) return;
   const card = el.closest('[data-bot],[data-mini]');
   if (el.hasAttribute('data-clear-log')) {
@@ -602,6 +604,13 @@ document.addEventListener('click', async (e) => {
     run('check', { mint: el.dataset.check });
   } else if (el.dataset.mint) {
     showDetail(el.dataset.mint);
+  } else if (el.hasAttribute('data-learn-auto')) {
+    run('setting', { bot: 'learn', key: 'auto', value: !settings.learn.auto });
+  } else if (el.hasAttribute('data-learn-run')) {
+    el.disabled = true;
+    await run('learnRun');
+  } else if (el.dataset.learnRevert) {
+    if (confirm('Deze automatische aanpassing terugdraaien?')) run('learnRevert', { id: el.dataset.learnRevert });
   } else if (el.dataset.applyFilter) {
     const cfg = JSON.parse(el.dataset.applyFilter);
     run('settings', { bot: 'sniper', patch: cfg, msg: `Sniper-drempels uit filter-optimizer toegepast: score ≥ ${cfg.minScore} (jong ${cfg.youngMinScore}), liq ≥ $${cfg.minLiq}, vol ≥ $${cfg.minVolH1}, B/S ≥ ${cfg.minBuySell}` });

@@ -16,6 +16,10 @@ export const DEFAULTS = {
     rounds: 4, intervalSec: 45, maxLiqDrop: 15, minPriceChange: -8, maxPriceDev: 6,
     minBuySell: 1.05, minScore: 60,
   },
+  learn: {
+    // Automatisch leren: apply what the measurements show, with guardrails
+    auto: true, minPaths: 30, minMeasured: 150, minTrades: 20, minAuc: 0.6, cooldownH: 24, minExitGain: 3, minEdgeGain: 6,
+  },
   paper: {
     startSol: 10, sizeSol: 0.5, maxPos: 5, tp: 100, sl: 20, trailAct: 20, trail: 12,
     maxHoldMin: 180, slippageBps: 1000, feeSol: 0.001, exitTickSec: 3, autoTrade: true,
@@ -28,6 +32,8 @@ export const DEFAULTS = {
     dailyLossPct: 15, maxLossStreak: 3, cooldownMin: 30, noRebuy: true,
     // realism + dev
     latencyMs: 1500, failPct: 5, devExitPct: 25,
+    // learned position sizing (changed by Automatisch leren)
+    sizeSlope: 1, multLijst: 1, multLaunch: 1, multMigratie: 1,
   },
 };
 

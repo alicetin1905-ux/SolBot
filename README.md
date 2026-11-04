@@ -33,6 +33,20 @@ Daarna is SolBot overal bereikbaar via `https://<mac-naam>.<tailnet>.ts.net/` zo
 Het dashboard ziet zelf of het van de Mac komt (groene badge met de naam van je Mac): dan draaien de bots op de Mac
 en sturen alle knoppen hun opdracht naar de Mac. De GitHub Pages-versie blijft gewoon werken in de browser.
 
+## Automatisch leren
+Staat standaard **aan** (Analyse-pagina → 🧠 Automatisch leren). Elk uur controleert de bot vier dingen en past ze
+zelf aan als zijn eigen data dat duidelijk laat zien:
+
+| Onderdeel | Leert van | Wanneer aangepast |
+|---|---|---|
+| 💰 Verkoopregels (TP, SL, trailing, deelverkoop) | prijsverloop van bevestigde coins | ≥ 30 coins, ≥ +3% per trade beter op de nieuwste 30% coins, statistisch duidelijk |
+| 🎯 Sniper-filters | alle gemeten coins, ook afgekeurde | ≥ 150 coins, ≥ +6 punten (winnaar% − rug%) beter in beide helften van de testcoins |
+| 🧠 Geleerde score als filter | het model | aan bij AUC ≥ 0,6, uit als het zakt onder 0,55 |
+| 📏 Positiegrootte (per score en per bron) | eigen trades | ≥ 20 trades, in kleine stappen (×0,8 / ×1,2) |
+
+Hooguit één aanpassing per onderdeel per 24 uur. Elke aanpassing komt in een log (en via ntfy op je iPhone) en
+is met één klik terug te draaien; daarna blijft dat onderdeel 3 dagen ongemoeid.
+
 ## Op je iPhone als app
 1. Open **https://alicetin1905-ux.github.io/SolBot/** in **Safari**.
 2. Tik op **Deel** (vierkantje met pijl omhoog) → **Zet op beginscherm** → **Voeg toe**.

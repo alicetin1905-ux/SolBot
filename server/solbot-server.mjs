@@ -80,6 +80,8 @@ on('paper:partial', (p) => ntfy(`Deel verkocht: ${p.symbol}`, `+${p.pnlPct.toFix
 on('paper:sell', (t) => ntfy(`Verkocht: ${t.symbol} ${t.pnlPct >= 0 ? '+' : ''}${t.pnlPct.toFixed(1)}%`, `${t.reason} · ${t.pnlSol >= 0 ? '+' : ''}${t.pnlSol.toFixed(4)} SOL`,
   t.reason.startsWith('Dev verkoopt') ? 'rotating_light' : t.pnlSol >= 0 ? 'moneybag' : 'small_red_triangle_down'));
 
+on('learn:change', (e) => ntfy('SolBot heeft iets geleerd', `${e.reason} (${e.evidence})`, 'brain'));
+
 const firstRun = !('solbot.running.v1' in store);
 eng.startLocal();
 if (firstRun) eng.commands.startAll(); // on the Mac the point is 24/7: start everything the first time

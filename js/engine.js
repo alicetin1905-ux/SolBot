@@ -1,13 +1,14 @@
 // The bot engine: creates the 4 bots + tracker, wires the pipeline and exposes every
 // user action as a named command. Used by the browser (local mode) and by the Mac
 // server (24/7 mode), so both behave exactly the same.
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile } from './store.js?v=20261103192235';
-import { SniperBot } from './sniper.js?v=20261103192235';
-import { SecurityBot } from './security.js?v=20261103192235';
-import { RealCheckBot } from './realcheck.js?v=20261103192235';
-import { PaperBot } from './paper.js?v=20261103192235';
-import { TrackerBot } from './metingen.js?v=20261103192235';
-import { train, setModel, getModel } from './model.js?v=20261103192235';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile } from './store.js?v=20261104090802';
+import { SniperBot } from './sniper.js?v=20261104090802';
+import { SecurityBot } from './security.js?v=20261104090802';
+import { RealCheckBot } from './realcheck.js?v=20261104090802';
+import { PaperBot } from './paper.js?v=20261104090802';
+import { TrackerBot } from './metingen.js?v=20261104090802';
+import { train, setModel, getModel } from './model.js?v=20261104090802';
+import { AutoLearner } from './autolearn.js?v=20261104090802';
 
 const RUN_KEY = 'solbot.running.v1';
 const BOT_IDS = ['sniper', 'security', 'real', 'paper'];
@@ -19,6 +20,7 @@ export function createEngine() {
   const trader = new PaperBot();
   const bots = { sniper, security, real, paper: trader };
   const tracker = new TrackerBot(); // background: always on, not part of start/stop all
+  const learner = new AutoLearner(tracker);
 
   const persistRunning = () => {
     try { localStorage.setItem(RUN_KEY, JSON.stringify(BOT_IDS.filter((k) => bots[k].running))); } catch { /* ignore */ }
@@ -40,6 +42,9 @@ export function createEngine() {
     tracker.start();
     setInterval(() => trainModel(false), 60 * 60000);
     setTimeout(() => { if (!getModel()) trainModel(false); }, 15000);
+    // Automatisch leren: every hour (first round 3 min after start)
+    setTimeout(() => learner.run(false), 3 * 60000);
+    setInterval(() => learner.run(false), 60 * 60000);
     try { JSON.parse(localStorage.getItem(RUN_KEY) || '[]').forEach((k) => bots[k]?.start()); } catch { /* ignore */ }
   }
 
@@ -87,7 +92,13 @@ export function createEngine() {
     resetPaper() { trader.reset(); },
     resetTracker() { tracker.reset(); },
     train({ manual = true } = {}) { const m = trainModel(manual); return m.error ? { error: m.error } : { n: m.n }; },
+    learnRun() {
+      trainModel(false);
+      learner.run(true);
+      log('app', '🧠 Leerronde uitgevoerd', 'ok');
+    },
+    learnRevert({ id }) { learner.revert(id); },
   };
 
-  return { sniper, security, real, trader, tracker, bots, commands, startLocal, trainModel };
+  return { sniper, security, real, trader, tracker, learner, bots, commands, startLocal, trainModel };
 }

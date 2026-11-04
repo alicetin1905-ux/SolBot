@@ -1,7 +1,7 @@
-import { Bot } from './bot.js?v=20261103192235';
-import * as api from './api.js?v=20261103192235';
-import { devBalance } from './dev.js?v=20261103192235';
-import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, currentProfile } from './store.js?v=20261103192235';
+import { Bot } from './bot.js?v=20261104090802';
+import * as api from './api.js?v=20261104090802';
+import { devBalance } from './dev.js?v=20261104090802';
+import { settings, paper, savePaper, freshPaper, upsertToken, emit, log, currentProfile } from './store.js?v=20261104090802';
 
 /**
  * Paper trader: simulates trades with fake SOL, but uses real Jupiter quotes
@@ -136,7 +136,11 @@ export class PaperBot extends Bot {
     // Size: base size scaled by total score (50 → 0.5×, 70 → 1×, 90 → 1.5×) and capped by pool size.
     let size = s.sizeSol;
     let factor = 1;
-    if (s.scoreSizing && t.rank != null) factor = clamp(0.5 + (t.rank - 50) / 40, 0.3, 1.5);
+    // score 70 = 1×; sizeSlope (learned) decides how strongly the score changes the size
+    if (s.scoreSizing && t.rank != null) factor = clamp(1 + (s.sizeSlope ?? 1) * (t.rank - 70) / 40, 0.3, 1.5);
+    // learned per source: sources that made money get bigger positions, losing ones smaller
+    const srcMult = { lijst: s.multLijst, launch: s.multLaunch, migratie: s.multMigratie }[t.origin || 'lijst'];
+    factor = clamp(factor * (srcMult ?? 1), 0.2, 2);
     size *= factor;
     const liqUsd = liqOf(t.pair);
     if (liqUsd && paper.solUsd) size = Math.min(size, (liqUsd * s.maxLiqPct / 100) / paper.solUsd);
@@ -186,7 +190,7 @@ export class PaperBot extends Bot {
     this.recordEquity(true);
     savePaper();
     emit('paper:buy', pos);
-    log(this.id, `🟢 PAPER BUY ${t.symbol}: ${size} SOL${factor !== 1 ? ` (${factor.toFixed(2)}× door score ${t.rank})` : ''} → ${fmtNum(ui)} tokens · kosten ${rt == null ? '?' : rt.toFixed(1) + '%'}`, 'ok');
+    log(this.id, `🟢 PAPER BUY ${t.symbol}: ${size} SOL${factor !== 1 ? ` (${factor.toFixed(2)}× door score ${t.rank} en bron)` : ''} → ${fmtNum(ui)} tokens · kosten ${rt == null ? '?' : rt.toFixed(1) + '%'}`, 'ok');
     this.changed();
   }
 

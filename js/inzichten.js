@@ -1,9 +1,10 @@
 // Analyse page: turns tracker records into "do my filters work?" answers.
-import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261103192235';
-import { exchangeOf } from './flow.js?v=20261103192235';
-import { exitKind } from './paper.js?v=20261103192235';
-import { settings } from './store.js?v=20261103192235';
-import { getModel, FEATURES, labeled, MIN_SAMPLES } from './model.js?v=20261103192235';
+import { CHECKPOINTS, STAGES, WIN_PCT, RUG_PCT } from './metingen.js?v=20261104090802';
+import { exchangeOf } from './flow.js?v=20261104090802';
+import { exitKind } from './paper.js?v=20261104090802';
+import { settings } from './store.js?v=20261104090802';
+import { AREAS } from './autolearn.js?v=20261104090802';
+import { getModel, FEATURES, labeled, MIN_SAMPLES } from './model.js?v=20261104090802';
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const median = (a) => {
@@ -193,6 +194,26 @@ export function passesFilters(r, c) {
   return (f.score || 0) >= (young ? c.youngMinScore : c.minScore);
 }
 
+export const filterKeys = (s) => ({ minScore: s.minScore, youngMinScore: s.youngMinScore, minLiq: s.minLiq, minVolH1: s.minVolH1, minBuySell: s.minBuySell, minMcap: s.minMcap, curveMinMcap: s.curveMinMcap });
+
+/** Scores every sniper-threshold combination on measured coins. Results sorted by edge (winner% − rug%). */
+export function filterSearch(measured, minN = Math.max(8, Math.round(measured.length * 0.03))) {
+  const evalCfg = (c) => {
+    const p = measured.filter((r) => passesFilters(r, c));
+    const win = p.length ? (p.filter((r) => r.max >= WIN_PCT).length / p.length) * 100 : 0;
+    const rug = p.length ? (p.filter((r) => r.rug).length / p.length) * 100 : 0;
+    return { c, n: p.length, win, rug, edge: win - rug };
+  };
+  const results = [];
+  for (const minScore of [35, 42, 50, 55, 60, 65]) for (const youngMinScore of [30, 35, 42, 50]) for (const minLiq of [3000, 5000, 7000, 10000, 15000])
+    for (const minVolH1 of [500, 1500, 3000, 6000]) for (const minBuySell of [0.9, 1.0, 1.1, 1.3]) for (const [minMcap, curveMinMcap] of [[8000, 6000], [15000, 9000], [20000, 12000]]) {
+      const r = evalCfg({ minScore, youngMinScore, minLiq, minVolH1, minBuySell, minMcap, curveMinMcap });
+      if (r.n >= minN) results.push(r);
+    }
+  results.sort((a, b) => b.edge - a.edge || b.n - a.n);
+  return { evalCfg, results };
+}
+
 let filtCache = { key: null };
 function filterOptimizerCard(recs) {
   const measured = recs.filter((r) => r.f && r.cp && r.cp[15] != null);
@@ -201,25 +222,11 @@ function filterOptimizerCard(recs) {
   if (measured.length < 30) {
     return `${head}<div class="empty big">🧪 Nog ${measured.length}/30 gemeten coins met kenmerken. Coins van vóór deze update tellen niet mee.</div></div></article>`;
   }
-  const s = settings.sniper;
-  const cur = { minScore: s.minScore, youngMinScore: s.youngMinScore, minLiq: s.minLiq, minVolH1: s.minVolH1, minBuySell: s.minBuySell, minMcap: s.minMcap, curveMinMcap: s.curveMinMcap };
+  const cur = filterKeys(settings.sniper);
   const key = `${measured.length}:${JSON.stringify(cur)}`;
   if (filtCache.key !== key) {
-    const evalCfg = (c) => {
-      const p = measured.filter((r) => passesFilters(r, c));
-      const win = p.length ? (p.filter((r) => r.max >= WIN_PCT).length / p.length) * 100 : 0;
-      const rug = p.length ? (p.filter((r) => r.rug).length / p.length) * 100 : 0;
-      return { c, n: p.length, win, rug, edge: win - rug };
-    };
-    const minN = Math.max(8, Math.round(measured.length * 0.03));
-    const res = [];
-    for (const minScore of [35, 42, 50, 55, 60, 65]) for (const youngMinScore of [30, 35, 42, 50]) for (const minLiq of [3000, 5000, 7000, 10000, 15000])
-      for (const minVolH1 of [500, 1500, 3000, 6000]) for (const minBuySell of [0.9, 1.0, 1.1, 1.3]) for (const [minMcap, curveMinMcap] of [[8000, 6000], [15000, 9000], [20000, 12000]]) {
-        const r = evalCfg({ minScore, youngMinScore, minLiq, minVolH1, minBuySell, minMcap, curveMinMcap });
-        if (r.n >= minN) res.push(r);
-      }
-    res.sort((a, b) => b.edge - a.edge || b.n - a.n);
-    filtCache = { key, cur: evalCfg(cur), top: res.slice(0, 5) };
+    const { evalCfg, results } = filterSearch(measured);
+    filtCache = { key, cur: evalCfg(cur), top: results.slice(0, 5) };
   }
   const { cur: c0, top } = filtCache;
   const k = (v) => `${Math.round(v / 100) / 10}K`;
@@ -264,7 +271,37 @@ function modelCard(recs) {
     <div class="body">${body}</div></article>`;
 }
 
-export function renderAnalyse(el, tracker, history = []) {
+function learnCard(learner) {
+  if (!learner) return '';
+  const st = learner.state;
+  const on = settings.learn.auto;
+  const when = (t) => new Date(t).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const tiles = Object.entries(AREAS).map(([k, label]) => {
+    const s = st.status?.[k];
+    return `<div class="kpi ${s?.msg === 'aangepast' || s?.msg === 'aangezet' ? 'good' : s?.ready ? 'accent' : ''}"><div class="kpi-txt"><div class="kpi-label">${label}</div>
+      <div class="kpi-sub" style="white-space:normal">${esc(s?.msg || 'nog niet gecontroleerd')}</div></div></div>`;
+  }).join('');
+  const fmt = (o) => Object.entries(o).map(([k, v]) => `${k} ${v}`).join(', ');
+  const rows = (st.changes || []).map((c) => `<tr>
+      <td>${when(c.t)}</td><td>${esc(AREAS[c.area] || c.area)}</td>
+      <td style="white-space:normal">${esc(c.reason)}<div class="mint">${esc(c.evidence)} · was: ${esc(fmt(c.from))}</div></td>
+      <td class="r">${c.reverted ? '<span class="chip">↩️ teruggedraaid</span>' : `<button class="btn small" data-learn-revert="${esc(c.id)}">↩️ Terugdraaien</button>`}</td></tr>`).join('');
+  return `<article class="card learn-card ${on ? 'on' : ''}"><header class="card-head"><div class="title"><h2>🧠 Automatisch leren ${on ? '<span class="chip good">aan</span>' : '<span class="chip">uit</span>'}</h2>
+    <p>Elk uur kijkt de bot of zijn eigen metingen en trades een betere instelling laten zien, en past die dan zelf aan. Alleen met genoeg data, alleen als de nieuwe instelling ook wint op de nieuwste 30% coins (niet gebruikt om haar te kiezen), en hooguit één aanpassing per onderdeel per ${settings.learn.cooldownH} uur.</p></div></header>
+    <div class="controls">
+      <button class="btn ${on ? '' : 'primary'}" data-learn-auto>${on ? '⏸ Automatisch leren uitzetten' : '▶ Automatisch leren aanzetten'}</button>
+      <button class="btn" data-learn-run>🔄 Nu een leerronde</button>
+      <span class="mint">${st.lastRun ? `laatste ronde ${when(st.lastRun)}` : 'eerste ronde 3 min na de start'}</span>
+    </div>
+    <div class="body">
+      <div class="kpis compact">${tiles}</div>
+      <div class="sectionlbl">Wat de bot zelf heeft aangepast</div>
+      ${rows ? `<table class="nice"><thead><tr><th>Wanneer</th><th>Onderdeel</th><th>Aanpassing</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : '<div class="empty">Nog niets aangepast. Dat gebeurt pas als de data duidelijk een betere instelling laat zien.</div>'}
+    </div></article>`;
+}
+
+export function renderAnalyse(el, tracker, history = [], learner = null) {
   const recs = tracker.list();
   const ins = insights(recs);
   const byStage = groupBy(recs, (r) => r.stage);
@@ -300,7 +337,7 @@ export function renderAnalyse(el, tracker, history = []) {
     </div>` : `<article class="card"><header class="card-head"><div class="title"><h2>Trade-analyse</h2></div></header><div class="body"><div class="empty big">📈 Nog geen gesloten paper trades.</div></div></article>`;
   const ago = (ms) => (ms < 3.6e6 ? `${Math.round(ms / 60000)}m` : `${(ms / 3.6e6).toFixed(1)}u`);
 
-  el.innerHTML = `
+  const html = `
     <article class="card"><header class="card-head"><div class="title"><h2>Inzichten</h2>
       <p>Winnaar = ooit ≥ +${WIN_PCT}% na eerste keer gezien · Rug = prijs ≤ ${RUG_PCT}% of liquiditeit −80% · metingen na ${CHECKPOINTS.map((c) => (c < 60 ? `${c}m` : `${c / 60}u`)).join(', ')}</p></div></header>
       <div class="body"><div class="insights">${ins.map(([k, t]) => `<div class="insight ${k}">${k === 'ok' ? '✅' : k === 'warn' ? '⚠️' : '💡'} ${esc(t)}</div>`).join('')}</div></div></article>
@@ -313,6 +350,7 @@ export function renderAnalyse(el, tracker, history = []) {
       ${table('Per bron', srcRows, 'Bron')}
       ${table('Per sniper score', scoreRows, 'Score')}
     </div>
+    ${learnCard(learner)}
     ${tradeSection}
     ${optimizerCard(recs, history)}
     ${filterOptimizerCard(recs)}
@@ -327,6 +365,8 @@ export function renderAnalyse(el, tracker, history = []) {
         <td>${r.rug ? '<span class="chip bad">💀 rug</span>' : r.max >= WIN_PCT ? '<span class="chip good">🏆 winnaar</span>' : ''}</td>
       </tr>`).join('')}</tbody></table>` : '<div class="empty big">🔬 Nog niets gevolgd. Start de Sniper; elke gescande coin wordt automatisch gevolgd.</div>'}
     </div></article>`;
+  // Only touch the page when something changed: keeps buttons clickable and the scroll position stable.
+  if (el._html !== html) { el.innerHTML = html; el._html = html; }
 }
 
 // ---------- CSV export ----------
