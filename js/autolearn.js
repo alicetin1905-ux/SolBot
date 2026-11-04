@@ -4,10 +4,10 @@
 //   * the new setting must also win on a holdout (the newest 30% of coins, not used to pick it),
 //   * each area changes at most once per cooldown (default 24h), sizing only in small steps,
 //   * every change is logged (+ notification) and can be reverted with one click.
-import { settings, saveSettings, paper, log, emit } from './store.js?v=20261104090802';
-import { simulate, optimize, filterSearch, filterKeys, passesFilters } from './inzichten.js?v=20261104090802';
-import { getModel } from './model.js?v=20261104090802';
-import { WIN_PCT } from './metingen.js?v=20261104090802';
+import { settings, saveSettings, paper, log, emit } from './store.js?v=20261104174655';
+import { simulate, optimize, filterSearch, filterKeys, passesFilters } from './inzichten.js?v=20261104174655';
+import { getModel } from './model.js?v=20261104174655';
+import { WIN_PCT } from './metingen.js?v=20261104174655';
 
 const KEY = 'solbot.learn.v1';
 export const AREAS = {

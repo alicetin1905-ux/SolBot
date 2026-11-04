@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,12 +70,34 @@ on('log', ({ bot, msg, level }) => { if (level === 'ok' || level === 'err') say(
 // optional push notifications to the iPhone via the free ntfy app (https://ntfy.sh)
 async function ntfy(title, body, tags) {
   if (!config.ntfyTopic) return;
+  const headers = { Title: encodeURIComponent(title), Tags: tags, 'X-Title-Encoding': 'url' };
+  // tapping the notification opens the live dashboard
+  if (config.dashboardUrl) headers.Click = `${config.dashboardUrl.replace(/\/$/, '')}/#/paper`;
   try {
-    await fetch(`https://ntfy.sh/${encodeURIComponent(config.ntfyTopic)}`, {
-      method: 'POST', body, headers: { Title: encodeURIComponent(title), Tags: tags, 'X-Title-Encoding': 'url' },
-    });
+    await fetch(`https://ntfy.sh/${encodeURIComponent(config.ntfyTopic)}`, { method: 'POST', body, headers });
   } catch { /* ignore */ }
 }
+
+// Where can the dashboard be opened from the phone? Prefer the Tailscale https address.
+function findTailscaleUrl() {
+  const cli = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale'];
+  const tryNext = (i) => {
+    if (i >= cli.length) return;
+    execFile(cli[i], ['status', '--json'], { timeout: 5000 }, (err, out) => {
+      if (err) return tryNext(i + 1);
+      try {
+        const dns = JSON.parse(out)?.Self?.DNSName?.replace(/\.$/, '');
+        if (dns && !/^https:/.test(config.dashboardUrl || '')) {
+          config.dashboardUrl = `https://${dns}`;
+          writeJSON(CONFIG_FILE, config);
+          say(`📱 Dashboard via Tailscale: ${config.dashboardUrl}`);
+        }
+      } catch { /* ignore */ }
+    });
+  };
+  tryNext(0);
+}
+findTailscaleUrl();
 on('paper:buy', (p) => ntfy(`Gekocht: ${p.symbol}`, `${p.entrySol.toFixed(3)} SOL · score ${p.rank ?? '?'}`, 'green_circle'));
 on('paper:partial', (p) => ntfy(`Deel verkocht: ${p.symbol}`, `+${p.pnlPct.toFixed(1)}% · ${p.soldSol.toFixed(3)} SOL veiliggesteld`, 'yellow_circle'));
 on('paper:sell', (t) => ntfy(`Verkocht: ${t.symbol} ${t.pnlPct >= 0 ? '+' : ''}${t.pnlPct.toFixed(1)}%`, `${t.reason} · ${t.pnlSol >= 0 ? '+' : ''}${t.pnlSol.toFixed(4)} SOL`,
@@ -95,7 +118,17 @@ const serverCommands = {
     if (config.ntfyTopic) ntfy('SolBot push staat aan', 'Je krijgt een melding bij elke koop en verkoop.', 'robot');
     return { topic: config.ntfyTopic };
   },
-  serverInfo() { return { name: hostName(), port: config.port, ntfyTopic: config.ntfyTopic, dataDir: DATA, node: process.version }; },
+  serverInfo() { return { name: hostName(), port: config.port, ntfyTopic: config.ntfyTopic, dashboardUrl: config.dashboardUrl || '', dataDir: DATA, node: process.version }; },
+  /** The dashboard reports the address it was opened on, so notifications can link to it. */
+  dashboardUrl({ url }) {
+    const u = String(url || '');
+    if (!/^https?:\/\/[^\s]+$/.test(u) || /localhost|127\.0\.0\.1/.test(u)) return { dashboardUrl: config.dashboardUrl || '' };
+    // an https (Tailscale) address works everywhere: always prefer it over a home-network http address
+    if (u.startsWith('https://') || !config.dashboardUrl) {
+      if (config.dashboardUrl !== u) { config.dashboardUrl = u; writeJSON(CONFIG_FILE, config); say(`📱 Dashboard-adres voor meldingen: ${u}`); }
+    }
+    return { dashboardUrl: config.dashboardUrl };
+  },
 };
 
 // ---------- http ----------

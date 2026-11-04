@@ -1,11 +1,11 @@
-import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261104090802';
-import { fmt } from './sniper.js?v=20261104090802';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261104090802';
-import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261104090802';
-import { getModel } from './model.js?v=20261104090802';
-import { createEngine } from './engine.js?v=20261104090802';
-import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261104090802';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261104090802';
+import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261104174655';
+import { fmt } from './sniper.js?v=20261104174655';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261104174655';
+import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261104174655';
+import { getModel } from './model.js?v=20261104174655';
+import { createEngine } from './engine.js?v=20261104174655';
+import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261104174655';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261104174655';
 
 const eng = createEngine();
 const { sniper, security, real, trader, tracker, bots } = eng;
@@ -721,6 +721,7 @@ detectRemote().then((isRemote) => {
     log('app', `🖥 Verbonden met ${remote.name}: de bots draaien 24/7 op de Mac.`, 'ok');
     startRemote(eng, () => { buildFormsIfIdle(); render(); });
     remoteCmd('serverInfo').then((r) => { remote.ntfy = r?.result?.ntfyTopic || ''; render(); }).catch(() => {});
+    remoteCmd('dashboardUrl', { url: location.origin }).catch(() => {}); // lets ntfy notifications open this dashboard
   } else {
     eng.startLocal();
     log('app', 'SolBot geladen — PAPER MODE (geen echt geld). De bots draaien in deze browser.', 'ok');

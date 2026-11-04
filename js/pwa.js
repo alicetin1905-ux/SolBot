@@ -1,6 +1,6 @@
 // Home-screen app (PWA) helpers: service worker, iOS install tip, keep the screen
 // awake while bots run, and notifications for trades.
-import { on, log } from './store.js?v=20261104090802';
+import { on, log } from './store.js?v=20261104174655';
 
 const NOTIFY_KEY = 'solbot.notify';
 const HINT_KEY = 'solbot.installHintClosed';

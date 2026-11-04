@@ -1,14 +1,14 @@
 // The bot engine: creates the 4 bots + tracker, wires the pipeline and exposes every
 // user action as a named command. Used by the browser (local mode) and by the Mac
 // server (24/7 mode), so both behave exactly the same.
-import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile } from './store.js?v=20261104090802';
-import { SniperBot } from './sniper.js?v=20261104090802';
-import { SecurityBot } from './security.js?v=20261104090802';
-import { RealCheckBot } from './realcheck.js?v=20261104090802';
-import { PaperBot } from './paper.js?v=20261104090802';
-import { TrackerBot } from './metingen.js?v=20261104090802';
-import { train, setModel, getModel } from './model.js?v=20261104090802';
-import { AutoLearner } from './autolearn.js?v=20261104090802';
+import { settings, saveSettings, resetSettings, paper, tokens, on, log, PROFILES, applyProfile } from './store.js?v=20261104174655';
+import { SniperBot } from './sniper.js?v=20261104174655';
+import { SecurityBot } from './security.js?v=20261104174655';
+import { RealCheckBot } from './realcheck.js?v=20261104174655';
+import { PaperBot } from './paper.js?v=20261104174655';
+import { TrackerBot } from './metingen.js?v=20261104174655';
+import { train, setModel, getModel } from './model.js?v=20261104174655';
+import { AutoLearner } from './autolearn.js?v=20261104174655';
 
 const RUN_KEY = 'solbot.running.v1';
 const BOT_IDS = ['sniper', 'security', 'real', 'paper'];

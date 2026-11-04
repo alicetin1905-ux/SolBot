@@ -1,8 +1,8 @@
 // Remote ("Mac") mode: when the dashboard is served by the SolBot server on the Mac,
 // it shows the Mac's live bots instead of running its own, and sends every action
 // as a command to the Mac.
-import { emit } from './store.js?v=20261104090802';
-import { applyState, applySlow } from './sync.js?v=20261104090802';
+import { emit } from './store.js?v=20261104174655';
+import { applyState, applySlow } from './sync.js?v=20261104174655';
 
 const KEY = 'solbot.remoteKey';
 export const remote = { active: false, name: '', online: false, lastOk: 0, seq: 0, slowKeys: {}, hashes: {}, error: '' };
