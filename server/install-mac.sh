@@ -52,7 +52,7 @@ cat > "$PLIST" <<EOF
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/caffeinate</string><string>-is</string>
-    <string>$NODE</string><string>$APP/server/solbot-server.mjs</string>
+    <string>$NODE</string><string>$APP/server/launcher.mjs</string>
   </array>
   <key>WorkingDirectory</key><string>$APP</string>
   <key>EnvironmentVariables</key><dict><key>SOLBOT_DATA</key><string>$DATA</string></dict>

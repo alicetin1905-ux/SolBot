@@ -1,8 +1,8 @@
 // State sync between the Mac server (runs the bots) and dashboards (view + send commands).
 // "state" is small and polled every few seconds; "slow" holds the big parts (trade history,
 // equity curve, tracker measurements, model) and is only sent when something changed.
-import { settings, paper, tokens, on } from './store.js?v=20261104174655';
-import { getModel, setModel } from './model.js?v=20261104174655';
+import { settings, paper, tokens, on } from './store.js?v=20261104184641';
+import { getModel, setModel } from './model.js?v=20261104184641';
 
 export const SYNC_EVENTS = ['log', 'candidate', 'sniper:results', 'sniper:launch', 'security:done', 'real:done', 'paper:buy', 'paper:sell', 'paper:partial'];
 const BOT_IDS = ['sniper', 'security', 'real', 'paper'];

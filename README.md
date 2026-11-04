@@ -22,7 +22,10 @@ Je data staat in `~/SolBot-data`. Aan het eind toont Terminal de adressen en een
 
 - **Op de Mac:** http://localhost:8787
 - **Thuis op je iPhone (zelfde wifi):** `http://<naam-van-je-mac>.local:8787` → Deel → Zet op beginscherm
-- **Updaten:** plak hetzelfde commando opnieuw · **Log:** `tail -f ~/SolBot-data/server.log`
+- **Updaten:** de Mac werkt zichzelf bij (elke 6 uur gecontroleerd), of tik in het dashboard op **⬆️ Mac updaten**.
+  Vóór elke update wordt `~/SolBot-backup` gemaakt; start de nieuwe versie niet goed op, dan zet de Mac zelf de vorige
+  versie terug en slaat die mislukte versie over. Uitzetten: Analyse-pagina → 🔄 Automatisch updaten.
+  (Handmatig kan ook nog: plak het installatiecommando opnieuw.) · **Log:** `tail -f ~/SolBot-data/server.log`
 - **Pushmeldingen:** tik in het dashboard op 🔕 en volg de stappen (gratis app *ntfy*).
 - **Data meenemen:** 💾 Backup op de Analyse-pagina van de oude versie, en ♻️ Backup terugzetten op de Mac.
 

@@ -14,6 +14,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,7 +31,7 @@ const CONFIG_FILE = path.join(DATA, 'config.json');
 const readJSON = (f, fallback) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return fallback; } };
 const writeJSON = (f, v) => { fs.writeFileSync(`${f}.tmp`, JSON.stringify(v)); fs.renameSync(`${f}.tmp`, f); };
 const newCode = () => crypto.randomBytes(6).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toLowerCase().padEnd(6, '7');
-const config = { port: 8787, key: newCode(), ntfyTopic: '', ...readJSON(CONFIG_FILE, {}) };
+const config = { port: 8787, key: newCode(), ntfyTopic: '', autoUpdate: true, ...readJSON(CONFIG_FILE, {}) };
 if (process.env.PORT) config.port = Number(process.env.PORT);
 writeJSON(CONFIG_FILE, config);
 
@@ -109,6 +110,83 @@ const firstRun = !('solbot.running.v1' in store);
 eng.startLocal();
 if (firstRun) eng.commands.startAll(); // on the Mac the point is 24/7: start everything the first time
 
+// ---------- updates from GitHub (button in the dashboard + automatic every 6h) ----------
+const REPO_ZIP = process.env.SOLBOT_UPDATE_ZIP || 'https://github.com/alicetin1905-ux/SolBot/archive/refs/heads/main.zip';
+const RAW_INDEX = process.env.SOLBOT_UPDATE_INDEX || 'https://raw.githubusercontent.com/alicetin1905-ux/SolBot/main/index.html';
+const UPDATE_FILE = path.join(DATA, 'update.json');
+const versionOf = (html) => (String(html).match(/SOLBOT_VERSION = '(\d+)'/) || [])[1] || '';
+const localVersion = () => { try { return versionOf(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')); } catch { return ''; } };
+const run = promisify(execFile);
+let latest = '';
+let updating = false;
+
+async function checkLatest() {
+  try {
+    const r = await fetch(`${RAW_INDEX}?t=${Date.now()}`, { cache: 'no-store' });
+    if (r.ok) latest = versionOf(await r.text()) || latest;
+  } catch { /* offline: try later */ }
+  return latest;
+}
+// a version that failed to start (and was rolled back) is skipped until an even newer one appears
+const updateAvailable = () => !!latest && Number(latest) > Number(localVersion()) && latest !== config.skipVersion;
+
+/** Downloads the newest SolBot, keeps the current one as ~/SolBot-backup, swaps and restarts. */
+async function selfUpdate(how) {
+  if (updating) return { busy: true };
+  updating = true;
+  const stage = `${ROOT}-nieuw`;
+  try {
+    const from = localVersion();
+    fs.rmSync(stage, { recursive: true, force: true });
+    fs.mkdirSync(stage);
+    const res = await fetch(`${REPO_ZIP}?t=${Date.now()}`);
+    if (!res.ok) throw new Error(`download mislukt (HTTP ${res.status})`);
+    fs.writeFileSync(path.join(stage, 'main.zip'), Buffer.from(await res.arrayBuffer()));
+    await run('unzip', ['-q', path.join(stage, 'main.zip'), '-d', stage]);
+    const src = path.join(stage, 'SolBot-main');
+    if (!fs.existsSync(path.join(src, 'server', 'solbot-server.mjs')) || !fs.existsSync(path.join(src, 'server', 'launcher.mjs'))) throw new Error('download onvolledig');
+    const to = versionOf(fs.readFileSync(path.join(src, 'index.html'), 'utf8'));
+    // swap: current → backup, new → current (same folder, so instant)
+    fs.rmSync(`${ROOT}-backup`, { recursive: true, force: true });
+    fs.renameSync(ROOT, `${ROOT}-backup`);
+    fs.renameSync(src, ROOT);
+    fs.rmSync(stage, { recursive: true, force: true });
+    writeJSON(UPDATE_FILE, { from, to, at: Date.now(), how, fails: 0 });
+    say(`⬆️ SolBot bijgewerkt (${how}): versie ${from} → ${to}. Herstart…`);
+    await ntfy('SolBot bijgewerkt', `Nieuwe versie geïnstalleerd (${how}). De bots herstarten even.`, 'arrow_up');
+    flush();
+    setTimeout(() => process.exit(0), 800); // launcher starts the new version
+    return { from, to };
+  } catch (e) {
+    updating = false;
+    fs.rmSync(stage, { recursive: true, force: true });
+    say(`⚠️ Update mislukt: ${e.message}`);
+    throw e;
+  }
+}
+
+// After an update: once the new version has run fine for a minute, it is final.
+if (fs.existsSync(UPDATE_FILE)) {
+  setTimeout(() => {
+    const u = readJSON(UPDATE_FILE, null);
+    fs.rmSync(UPDATE_FILE, { force: true });
+    if (u) { say(`✅ Update naar ${u.to} werkt`); ntfy('SolBot update gelukt', `Versie ${u.to} draait goed.`, 'white_check_mark'); }
+  }, 60000);
+}
+const rollback = readJSON(path.join(DATA, 'update-rollback.json'), null);
+if (rollback) {
+  config.skipVersion = rollback.to;
+  writeJSON(CONFIG_FILE, config);
+  say(`↩️ Vorige update (${rollback.to}) startte niet goed en is teruggedraaid naar ${rollback.from}`);
+  ntfy('SolBot update teruggedraaid', `Versie ${rollback.to} startte niet goed, de vorige versie draait weer.`, 'warning');
+  fs.rmSync(path.join(DATA, 'update-rollback.json'), { force: true });
+}
+setTimeout(async function autoUpdateLoop() {
+  await checkLatest();
+  if (config.autoUpdate && updateAvailable() && !fs.existsSync(UPDATE_FILE)) await selfUpdate('automatisch').catch(() => {});
+  setTimeout(autoUpdateLoop, 6 * 3.6e6);
+}, 10 * 60000);
+
 // server-only commands
 const serverCommands = {
   ntfy({ topic }) {
@@ -118,7 +196,13 @@ const serverCommands = {
     if (config.ntfyTopic) ntfy('SolBot push staat aan', 'Je krijgt een melding bij elke koop en verkoop.', 'robot');
     return { topic: config.ntfyTopic };
   },
-  serverInfo() { return { name: hostName(), port: config.port, ntfyTopic: config.ntfyTopic, dashboardUrl: config.dashboardUrl || '', dataDir: DATA, node: process.version }; },
+  serverInfo() {
+    return { name: hostName(), port: config.port, ntfyTopic: config.ntfyTopic, dashboardUrl: config.dashboardUrl || '', dataDir: DATA, node: process.version,
+      version: localVersion(), latest, updateAvailable: updateAvailable(), autoUpdate: !!config.autoUpdate, launcher: !!process.env.SOLBOT_LAUNCHER };
+  },
+  async checkUpdate() { await checkLatest(); return serverCommands.serverInfo(); },
+  async update() { await checkLatest(); return selfUpdate('via dashboard'); },
+  autoUpdate({ on }) { config.autoUpdate = !!on; writeJSON(CONFIG_FILE, config); say(`🔄 Automatisch updaten ${config.autoUpdate ? 'aan' : 'uit'}`); return { autoUpdate: config.autoUpdate }; },
   /** The dashboard reports the address it was opened on, so notifications can link to it. */
   dashboardUrl({ url }) {
     const u = String(url || '');

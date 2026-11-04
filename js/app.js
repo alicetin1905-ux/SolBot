@@ -1,11 +1,11 @@
-import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261104174655';
-import { fmt } from './sniper.js?v=20261104174655';
-import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261104174655';
-import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261104174655';
-import { getModel } from './model.js?v=20261104174655';
-import { createEngine } from './engine.js?v=20261104174655';
-import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261104174655';
-import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261104174655';
+import { settings, paper, tokens, on, log, PROFILES, currentProfile } from './store.js?v=20261104184641';
+import { fmt } from './sniper.js?v=20261104184641';
+import { initFlow, updateFlow, exchangeOf } from './flow.js?v=20261104184641';
+import { initPWA, keepAwake, notifyState, toggleNotify } from './pwa.js?v=20261104184641';
+import { getModel } from './model.js?v=20261104184641';
+import { createEngine } from './engine.js?v=20261104184641';
+import { remote, detectRemote, remoteCmd, startRemote, pull, exportBackup, importBackup } from './remote.js?v=20261104184641';
+import { renderAnalyse, exportTracker, exportTrades, agg, insights } from './inzichten.js?v=20261104184641';
 
 const eng = createEngine();
 const { sniper, security, real, trader, tracker, bots } = eng;
@@ -207,6 +207,15 @@ function renderRemoteBadge() {
   el.className = `badge remote ${stale ? 'off' : 'on'}`;
   el.textContent = stale ? `⚠️ ${remote.name} offline` : `🖥 ${remote.name}`;
   el.title = stale ? `Geen verbinding met de Mac: ${remote.error || 'geen antwoord'}` : 'Bots draaien 24/7 op de Mac';
+}
+
+function renderUpdateBtn() {
+  const info = remote.info || {};
+  const up = $('#updateBtn'), auto = $('#autoUpdateBtn');
+  up.hidden = !(remote.active && info.updateAvailable && info.launcher);
+  up.title = info.updateAvailable ? `Nieuwe versie ${info.latest} beschikbaar (Mac draait ${info.version})` : '';
+  auto.hidden = !(remote.active && info.launcher);
+  auto.textContent = info.autoUpdate ? '🔄 Automatisch updaten: aan' : '🔄 Automatisch updaten: uit';
 }
 
 function renderNotifyBtn() {
@@ -523,7 +532,7 @@ function render() {
   pending = true;
   requestAnimationFrame(() => {
     pending = false;
-    renderKpis(); renderFlow(); renderProfiles(); renderNotifyBtn(); renderRemoteBadge();
+    renderKpis(); renderFlow(); renderProfiles(); renderNotifyBtn(); renderRemoteBadge(); renderUpdateBtn();
     keepAwake(Object.values(bots).some((b) => b.running)); // screen stays on while bots run
     Object.keys(bots).forEach(renderBotHead);
     renderSniper(); renderSecurity(); renderReal(); renderPaper(); renderHistory();
@@ -650,6 +659,17 @@ $('#notifyBtn').onclick = async () => {
   remote.ntfy = r?.result?.topic || '';
   render();
 };
+$('#updateBtn').onclick = async () => {
+  const i = remote.info || {};
+  if (!confirm(`Nieuwe versie beschikbaar (${i.latest}). Mac nu bijwerken?\n\nDe bots herstarten even (± 20 seconden). Als de nieuwe versie niet goed start, zet de Mac zelf de vorige versie terug.`)) return;
+  const r = await run('update');
+  if (!r?.error) { log('app', '⬆️ Mac wordt bijgewerkt, dashboard herlaadt over 25 seconden…', 'ok'); setTimeout(() => location.reload(), 25000); }
+};
+$('#autoUpdateBtn').onclick = async () => {
+  const r = await run('autoUpdate', { on: !(remote.info?.autoUpdate) });
+  if (r?.result) remote.info = { ...remote.info, autoUpdate: r.result.autoUpdate };
+  render();
+};
 $('#startAll').onclick = () => run('startAll');
 $('#stopAll').onclick = () => run('stopAll');
 $('#resetPaper').onclick = () => { if (confirm('Paper account resetten? Alle posities en historie worden gewist.')) run('resetPaper'); };
@@ -720,7 +740,9 @@ detectRemote().then((isRemote) => {
     document.documentElement.classList.add('remote');
     log('app', `🖥 Verbonden met ${remote.name}: de bots draaien 24/7 op de Mac.`, 'ok');
     startRemote(eng, () => { buildFormsIfIdle(); render(); });
-    remoteCmd('serverInfo').then((r) => { remote.ntfy = r?.result?.ntfyTopic || ''; render(); }).catch(() => {});
+    const refreshInfo = (cmd = 'serverInfo') => remoteCmd(cmd).then((r) => { remote.info = r?.result || {}; remote.ntfy = remote.info.ntfyTopic || ''; render(); }).catch(() => {});
+    refreshInfo('checkUpdate');
+    setInterval(() => refreshInfo('checkUpdate'), 15 * 60000);
     remoteCmd('dashboardUrl', { url: location.origin }).catch(() => {}); // lets ntfy notifications open this dashboard
   } else {
     eng.startLocal();

@@ -1,6 +1,6 @@
 // Flow map: exchange tiles -> bot tiles, joined by wires. Every coin is a
 // pulse that travels along the wires while it keeps getting approved.
-import { on } from './store.js?v=20261104174655';
+import { on } from './store.js?v=20261104184641';
 
 export const EXCHANGES = [
   { id: 'pump', name: 'Pump.fun', short: 'Pump', logo: 'P', match: /pump/i },
